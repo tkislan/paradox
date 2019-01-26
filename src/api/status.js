@@ -1,5 +1,5 @@
-const got = require('got');
 const vm = require('vm');
+const axios = require('axios');
 const fs = require('fs');
 
 const { HOSTNAME } = require('../config');
@@ -9,9 +9,8 @@ const USERACCESS_VALUE_RE = /tbl_useraccess[ ]+=[ ]+(new Array\((?:\d,?)*\))/m;
 const ALARMS_VALUE_RE = /tbl_alarmes[ ]+=[ ]+(new Array\((?:\d,?)*\))/m;
 
 async function getStatusPage() {
-  const response = await got(`http://${HOSTNAME}/statuslive.html`);
-  console.log(response);
-  return response.body;
+  const response = await axios({ url: `${HOSTNAME}/statuslive.html` });
+  return response.data;
 }
 
 // function getStatusPage() {
@@ -34,9 +33,8 @@ function getValue(statusPage, regexp) {
 
 async function sendKeepAlive() {
   const randomNumber = Math.random().toString().replace(",", ".").split(".")[1];
-  const searchParams = new URLSearchParams([['msgid', 1], [randomNumber, null]]);
-  const response = await got(`http://${HOSTNAME}/keep_alive.html`, { searchParams });
-  console.log(response);
+  const params = { msgid: 1, [randomNumber]: null };
+  await axios({ url: `${HOSTNAME}/keep_alive.html`, params });
 }
 
 async function getParadoxStatus() {
@@ -63,4 +61,4 @@ async function getStatus() {
 module.exports = {
   sendKeepAlive,
   getStatus,
-}
+};

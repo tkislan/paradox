@@ -9,7 +9,7 @@ function setupSignalHandler(cb) {
   Object.entries(SIGNALS).forEach(([signal, code]) => {
     const exit = () => {
       process.exit(128 + code);
-    }
+    };
 
     process.on(signal, () => {
       console.log(`Process received a ${signal} signal`);

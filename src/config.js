@@ -5,4 +5,4 @@ module.exports = ENV_VARIABLES.reduce((acc, key) => {
   if (value == null) throw new Error(`Missing enviromnent variable: ${key}`);
 
   return { ...acc, [key]: value };
-}, {})
+}, {});

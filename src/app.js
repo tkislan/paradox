@@ -11,36 +11,36 @@ login().catch(error => {
   process.exit(1);
 });
 
-// const keepAliveIntervalId = setInterval(() => {
-//   sendKeepAlive().catch(console.error);
-// }, 3000);
+const keepAliveIntervalId = setInterval(() => {
+  sendKeepAlive().catch(console.error);
+}, 3000);
 
 
-// function deepArrayEqual(a, b) {
-//   if (a.length !== b.length) return false;
+function deepArrayEqual(a, b) {
+  if (a.length !== b.length) return false;
 
-//   for (let i = 0; i < a.length; i++) {
-//     if (a[i] !== b[i]) return false;
-//   }
-//   return true;
-// }
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
 
-// let prevStatus = { statuszone: [], useraccess: [], alarms: [] };
-// setInterval(async () => {
-//   const status = await getStatus();
+let prevStatus = { statuszone: [], useraccess: [], alarms: [] };
+setInterval(async () => {
+  const status = await getStatus();
 
-//   const { statuszone, useraccess, alarms } = status;
+  const { statuszone, useraccess, alarms } = status;
 
-//   for (const key of ['statuszone', 'useraccess', 'alarms']) {
-//     if (!deepArrayEqual(prevStatus[key], status[key])) {
-//       console.log(`${key} changed`);
-//       console.log(prevStatus[key].join(','));
-//       console.log(status[key].join(','));
-//     }
-//   }
+  for (const key of ['statuszone', 'useraccess', 'alarms']) {
+    if (!deepArrayEqual(prevStatus[key], status[key])) {
+      console.log(`${key} changed`);
+      console.log(prevStatus[key].join(','));
+      console.log(status[key].join(','));
+    }
+  }
 
-//   prevStatus = status;
-// }, 10000);
+  prevStatus = status;
+}, 1000);
 
 const app = express();
 
@@ -71,7 +71,7 @@ const server = app.listen(PORT, () => console.log(`Server listening on port ${PO
 
 
 setupSignalHandler((signal, code) => {
-  // clearInterval(keepAliveIntervalId);
+  clearInterval(keepAliveIntervalId);
 
   return Promise.all([
     new Promise((resolve) => server.close(resolve)),

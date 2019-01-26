@@ -14,3 +14,5 @@ COPY src $HOME/app/
 RUN chown -R node:node $HOME/app
 
 USER node
+
+CMD ["node", "app.js"]

@@ -1,4 +1,4 @@
-const got = require('got');
+const axios = require('axios');
 const fs = require('fs');
 
 const { HOSTNAME, USERNAME, PASSWORD } = require('../config');
@@ -6,6 +6,16 @@ const { keeplowbyte, hex_md5, rc4 } = require('../paradox');
 const { sleep } = require('../util');
 
 const LOGIN_SESSION_VALUE_RE = /loginaff\("([\w]+)"/m;
+const PAGE_TITLE_RE = /<head>.*<title>(.*)<\/title>.*<\/head>/m;
+
+const headers = {
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+  'Accept-Encoding': 'gzip, deflate',
+  'Accept-Language': 'en-GB,en;q=0.9,en-US;q=0.8,sk;q=0.7',
+  'Connection': 'keep-alive',
+  'Referer': `${HOSTNAME}/login.html`,
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36',
+};
 
 function encryptCredentials(sessionValue) {
   const password = hex_md5(keeplowbyte(PASSWORD)) + sessionValue;
@@ -14,14 +24,9 @@ function encryptCredentials(sessionValue) {
   return [usernameHash, passwordHash];
 }
 
-async function getLogin() {
-  const response = await got(`http://${HOSTNAME}/login.html`);
-  return response.body;
-}
-
 async function getLoginPage() {
-  const response = await got(`http://${HOSTNAME}/login_page.html`);
-  return response.body;
+  const response = await axios({ url: `${HOSTNAME}/login_page.html`, headers });
+  return response.data;
 }
 
 // function getLoginPage() {
@@ -40,35 +45,32 @@ function getSessionValue(loginPage) {
 }
 
 async function createSession(username, password) {
-  const searchParams = new URLSearchParams([['u', username], ['p', password]]);
-  const headers = {
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-    'Accept-Encoding': 'gzip, deflate',
-    'Accept-Language': 'en-GB,en;q=0.9,en-US;q=0.8,sk;q=0.7',
-    'Connection': 'keep-alive',
-    'Referer': `http://${HOSTNAME}/login.html`,
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36',
-  };
-  const response = await got(`http://${HOSTNAME}/default.html`, { searchParams, headers });
-  console.log(response.request);
-  console.log(response.body);
+  const params = { u: username, p: password };
+  const response = await axios({ url: `${HOSTNAME}/default.html`, params, headers });
+  return response.data;
+}
+
+function getTitle(defaultPage) {
+  const match = PAGE_TITLE_RE.exec(defaultPage);
+  if (!match) throw Error('Session value not found in login page');
+  return match[1];
 }
 
 async function login() {
-  console.log(await getLogin());
   const loginPage = await getLoginPage();
   const sessionValue = getSessionValue(loginPage);
-  await sleep(5000);
   console.log(`Session value: ${sessionValue}`);
   const [username, password] = encryptCredentials(sessionValue, USERNAME, PASSWORD);
-  await createSession(username, password);
+  const defaultPage = await createSession(username, password);
+  const defaultPageTitle = getTitle(defaultPage);
+
+  if (defaultPageTitle !== 'Paradox IP Module') throw new Error('Login failed');
 }
 
 
 async function logout() {
-  const response = await got(`http://${HOSTNAME}/logout.html`);
-  console.log(response);
-};
+  await axios({ url: `${HOSTNAME}/logout.html` });
+}
 
 module.exports = {
   encryptCredentials,
