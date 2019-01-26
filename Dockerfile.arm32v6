@@ -1,6 +1,6 @@
 FROM balenalib/raspberrypi3-node:10.14-stretch as builder
 
-ENV HOME=/home/node
+ENV HOME=/root
 ENV NODE_ENV=production
 
 WORKDIR $HOME/app
@@ -15,7 +15,7 @@ RUN ["cross-build-end"]
 
 FROM arm32v6/node:10.15.0-alpine
 
-ENV HOME=/home/node
+ENV HOME=/root
 ENV NODE_ENV=production
 
 WORKDIR $HOME/app
@@ -24,9 +24,5 @@ COPY --from=builder $HOME/app/package.json $HOME/app/
 COPY --from=builder $HOME/app/node_modules $HOME/app/
 
 COPY src $HOME/app/
-
-RUN chown -R node:node $HOME/app
-
-USER node
 
 CMD ["yarn", "start"]

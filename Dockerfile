@@ -5,9 +5,9 @@ ENV NODE_ENV=production
 
 WORKDIR $HOME/app
 
-ADD package.json yarn.lock $HOME/app/
+ADD package.json package-lock.json $HOME/app/
 
-RUN yarn install
+RUN npm install
 
 COPY src $HOME/app/
 
