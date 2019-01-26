@@ -1,0 +1,13 @@
+{
+  "name": "paradox-bridge",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "scripts": {
+    "start": "node ./src/app.js"
+  },
+  "dependencies": {
+    "express": "^4.16.4",
+    "got": "^9.6.0"
+  }
+}
