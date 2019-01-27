@@ -16,37 +16,35 @@ const keepAliveIntervalId = setInterval(() => {
 }, 3000);
 
 
-function deepArrayEqual(a, b) {
-  if (a.length !== b.length) return false;
-
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return false;
-  }
-  return true;
-}
-
-let prevStatus = { statuszone: [], useraccess: [], alarms: [] };
-setInterval(async () => {
-  let status;
-  try {
-    status = await getStatus();
-  } catch (error) {
-    console.error(error);
-    return;
-  }
-
-  const { statuszone, useraccess, alarms } = status;
-
-  for (const key of ['statuszone', 'useraccess', 'alarms']) {
-    if (!deepArrayEqual(prevStatus[key], status[key])) {
-      console.log(`${key} changed`);
-      console.log(prevStatus[key].join(','));
-      console.log(status[key].join(','));
-    }
-  }
-
-  prevStatus = status;
-}, 1000);
+// function deepArrayEqual(a, b) {
+//   if (!a || !b || a.length !== b.length) return false;
+//
+//   for (let i = 0; i < a.length; i++) {
+//     if (a[i] !== b[i]) return false;
+//   }
+//   return true;
+// }
+//
+// let prevStatus = { raw: { statuszone: [], useraccess: [], alarms: [] } };
+// setInterval(async () => {
+//   let status;
+//   try {
+//     status = await getStatus();
+//   } catch (error) {
+//     console.error(error);
+//     return;
+//   }
+//
+//   for (const key of ['statuszone', 'useraccess', 'alarms']) {
+//     if (!deepArrayEqual(prevStatus.raw[key], status.raw[key])) {
+//       console.log(`${key} changed`);
+//       console.log(prevStatus[key].join(','));
+//       console.log(status[key].join(','));
+//     }
+//   }
+//
+//   prevStatus = status;
+// }, 1000);
 
 const app = express();
 

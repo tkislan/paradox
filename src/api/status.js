@@ -67,9 +67,11 @@ async function getStatus() {
   // TODO - parse binary status
   return {
     armed: isArmed(useraccess) === true,
-    statuszone,
-    useraccess,
-    alarms,
+    raw: {
+      statuszone,
+      useraccess,
+      alarms,
+    },
   };
 }
 
