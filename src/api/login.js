@@ -57,6 +57,11 @@ function getTitle(defaultPage) {
 }
 
 async function login() {
+  try {
+    await logout();
+  } catch (error) {
+    console.warn('Logout before login failed');
+  }
   const loginPage = await getLoginPage();
   const sessionValue = getSessionValue(loginPage);
   console.log(`Session value: ${sessionValue}`);

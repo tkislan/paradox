@@ -1,4 +1,4 @@
-const ENV_VARIABLES = ['HOSTNAME', 'USERNAME', 'PASSWORD', 'PORT'];
+const ENV_VARIABLES = ['HOSTNAME', 'USERNAME', 'PASSWORD', 'PORT', 'MQTT_HOSTNAME', 'MQTT_PORT'];
 
 module.exports = ENV_VARIABLES.reduce((acc, key) => {
   const value = process.env[key];
