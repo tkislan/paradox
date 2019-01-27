@@ -8,8 +8,11 @@ const STATUSZONE_VALUE_RE = /tbl_statuszone[ ]+=[ ]+(new Array\((?:\d,?)*\))/m;
 const USERACCESS_VALUE_RE = /tbl_useraccess[ ]+=[ ]+(new Array\((?:\d,?)*\))/m;
 const ALARMS_VALUE_RE = /tbl_alarmes[ ]+=[ ]+(new Array\((?:\d,?)*\))/m;
 
+const ARMED_STATUS = 7;
+const DISARMED_STATUS = 1;
+
 async function getStatusPage() {
-  const response = await axios({ url: `${HOSTNAME}/statuslive.html` });
+  const response = await axios({ url: `http://${HOSTNAME}/statuslive.html` });
   return response.data;
 }
 
@@ -34,7 +37,7 @@ function getValue(statusPage, regexp) {
 async function sendKeepAlive() {
   const randomNumber = Math.random().toString().replace(",", ".").split(".")[1];
   const params = { msgid: 1, [randomNumber]: null };
-  await axios({ url: `${HOSTNAME}/keep_alive.html`, params });
+  await axios({ url: `http://${HOSTNAME}/keep_alive.html`, params });
 }
 
 async function getParadoxStatus() {
@@ -47,11 +50,23 @@ async function getParadoxStatus() {
   ];
 }
 
+function isArmed(useraccess) {
+  if (!useraccess) return null;
+  switch (parseInt(useraccess, 10)) {
+      case ARMED_STATUS:
+        return true;
+      case DISARMED_STATUS:
+        return false;
+      default:
+        return null;
+  }
+}
+
 async function getStatus() {
   const [statuszone, useraccess, alarms] = await getParadoxStatus();
   // TODO - parse binary status
   return {
-    armed: false,
+    armed: isArmed(useraccess) === true,
     statuszone,
     useraccess,
     alarms,

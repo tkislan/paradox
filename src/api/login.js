@@ -13,7 +13,7 @@ const headers = {
   'Accept-Encoding': 'gzip, deflate',
   'Accept-Language': 'en-GB,en;q=0.9,en-US;q=0.8,sk;q=0.7',
   'Connection': 'keep-alive',
-  'Referer': `${HOSTNAME}/login.html`,
+  'Referer': `http://${HOSTNAME}/login.html`,
   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36',
 };
 
@@ -25,7 +25,7 @@ function encryptCredentials(sessionValue) {
 }
 
 async function getLoginPage() {
-  const response = await axios({ url: `${HOSTNAME}/login_page.html`, headers });
+  const response = await axios({ url: `http://${HOSTNAME}/login_page.html`, headers });
   return response.data;
 }
 
@@ -46,7 +46,7 @@ function getSessionValue(loginPage) {
 
 async function createSession(username, password) {
   const params = { u: username, p: password };
-  const response = await axios({ url: `${HOSTNAME}/default.html`, params, headers });
+  const response = await axios({ url: `http://${HOSTNAME}/default.html`, params, headers });
   return response.data;
 }
 
@@ -69,7 +69,7 @@ async function login() {
 
 
 async function logout() {
-  await axios({ url: `${HOSTNAME}/logout.html` });
+  await axios({ url: `http://${HOSTNAME}/logout.html` });
 }
 
 module.exports = {

@@ -27,7 +27,13 @@ function deepArrayEqual(a, b) {
 
 let prevStatus = { statuszone: [], useraccess: [], alarms: [] };
 setInterval(async () => {
-  const status = await getStatus();
+  let status;
+  try {
+    status = await getStatus();
+  } catch (error) {
+    console.error(error);
+    return;
+  }
 
   const { statuszone, useraccess, alarms } = status;
 
@@ -54,14 +60,14 @@ app.get('/status', (req, res) => {
 });
 
 app.post('/arm', (req, res) => {
-  arm.then(() => req.sendStatus(200), (error) => {
+  arm().then(() => res.sendStatus(200), (error) => {
     console.error(error);
     res.status(500).json({ msg: error.message });
   });
 });
 
 app.post('/disarm', (req, res) => {
-  disarm.then(() => req.sendStatus(200), (error) => {
+  disarm().then(() => res.sendStatus(200), (error) => {
     console.error(error);
     res.status(500).json({ msg: error.message });
   });
