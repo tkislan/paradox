@@ -19,10 +19,12 @@ function statusListener() {
     }
 
     for (const key of ['statuszone', 'useraccess', 'alarms']) {
-      if (!deepArrayEqual(prevStatus.raw[key], status.raw[key])) {
+      const prevRawStatus = prevStatus.raw[key];
+      const rawStatus = status.raw[key];
+      if (!deepArrayEqual(prevRawStatus, rawStatus)) {
         console.log(`${key} changed`);
-        console.log(prevStatus[key].join(','));
-        console.log(status[key].join(','));
+        console.log(prevRawStatus.join(','));
+        console.log(rawStatus.join(','));
       }
     }
 

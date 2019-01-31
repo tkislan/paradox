@@ -8,8 +8,10 @@ const STATUSZONE_VALUE_RE = /tbl_statuszone[ ]+=[ ]+(new Array\((?:\d,?)*\))/m;
 const USERACCESS_VALUE_RE = /tbl_useraccess[ ]+=[ ]+(new Array\((?:\d,?)*\))/m;
 const ALARMS_VALUE_RE = /tbl_alarmes[ ]+=[ ]+(new Array\((?:\d,?)*\))/m;
 
-const ARMED_STATUS = 7;
+
 const DISARMED_STATUS = 1;
+const ARMED_STATUS = 2;
+const ARMING_STATUS = 7;
 
 async function getStatusPage() {
   const response = await axios({ url: `http://${HOSTNAME}/statuslive.html` });
@@ -54,6 +56,7 @@ function isArmed(useraccess) {
   if (!useraccess) return null;
   switch (parseInt(useraccess, 10)) {
       case ARMED_STATUS:
+      case ARMING_STATUS:
         return true;
       case DISARMED_STATUS:
         return false;
@@ -66,7 +69,7 @@ async function getStatus() {
   const [statuszone, useraccess, alarms] = await getParadoxStatus();
   // TODO - parse binary status
   return {
-    armed: isArmed(useraccess) === true,
+    armed: isArmed(useraccess),
     raw: {
       statuszone,
       useraccess,

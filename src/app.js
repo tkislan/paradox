@@ -14,16 +14,17 @@ const STATUS_ARMED_TOPIC = 'paradox/status/armed';
 async function run() {
   await login();
 
+  const mqttLink = await createMqttLink();
+
   const keepAliveWorker = keepAlive();
   const statusEvents = statusListener();
-  const mqttLink = createMqttLink();
 
   statusEvents.on('armedChanged', (armed) => {
     switch (armed) {
       case true:
-        return mqttLink.publish(STATUS_ARMED_TOPIC, 'ON');
+        return mqttLink.publish(STATUS_ARMED_TOPIC, 'ON', { retain: true });
       case false:
-        return mqttLink.publish(STATUS_ARMED_TOPIC, 'OFF');
+        return mqttLink.publish(STATUS_ARMED_TOPIC, 'OFF', { retain: true });
       case null:
         console.log('Unknown armed status');
     }

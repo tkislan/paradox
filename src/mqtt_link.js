@@ -10,7 +10,25 @@ const COMMAND_DISARM_TOPIC = 'paradox/command/disarm';
 function getClient() {
   return new Promise((resolve, reject) => {
     const client = mqtt.connect(`mqtt://${MQTT_HOSTNAME}:${MQTT_PORT}`);
-    client.on('connect', () => { resolve(client) });
+
+    const timeoutId = setTimeout(() => reject(new Error('MQTT connect timeout')), 5000);
+
+    client.on('connect', () => {
+      clearTimeout(timeoutId);
+      client.removeAllListeners(['connect', 'error']);
+      console.log('MQTT client connected');
+
+      client.on('close', () => { process.exit(1); });
+      client.on('error', () => { process.exit(1); });
+
+      resolve(client);
+    });
+    client.on('error', () => {
+      clearTimeout(timeoutId);
+      client.removeAllListeners(['connect', 'error']);
+      console.error(error);
+      reject(error);
+    });
   });
 }
 
@@ -38,7 +56,7 @@ async function createMqttLink() {
   });
 
   return {
-    publish: (topic, message) => client.publish(topic, message),
+    publish: (topic, message, options) => { console.log('publish', topic, message); client.publish(topic, message, options) },
   };
 }
 
