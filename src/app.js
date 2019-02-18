@@ -1,3 +1,5 @@
+// @flow
+
 const express = require('express');
 
 const { login, logout } = require('./api/login');
@@ -10,14 +12,15 @@ const { PORT } = require('./config');
 const { setupSignalHandler } = require('./signal');
 
 const STATUS_ARMED_TOPIC = 'paradox/status/armed';
+const SENSOR_MOTION_TOPIC_TEMPLATE = (index) => `paradox/sensor/${index}`;
 
 async function run() {
-  await login();
+  const { zoneTuples } = await login();
 
   const mqttLink = await createMqttLink();
 
   const keepAliveWorker = keepAlive();
-  const statusEvents = statusListener();
+  const statusEvents = statusListener(zoneTuples);
 
   statusEvents.on('armedChanged', (armed) => {
     switch (armed) {
@@ -27,6 +30,17 @@ async function run() {
         return mqttLink.publish(STATUS_ARMED_TOPIC, 'OFF', { retain: true });
       case null:
         console.log('Unknown armed status');
+    }
+  });
+
+  statusEvents.on('sensorChanged', (index, motionDetected) => {
+    switch (motionDetected) {
+      case true:
+        return mqttLink.publish(SENSOR_MOTION_TOPIC_TEMPLATE(index), 'ON', { retain: true });
+      case false:
+        return mqttLink.publish(SENSOR_MOTION_TOPIC_TEMPLATE(index), 'OFF', { retain: true });
+      default:
+        console.log(`Unknown sensor status: ${motionDetected}`);
     }
   });
 
@@ -57,7 +71,7 @@ async function run() {
 
   const server = app.listen(PORT, () => console.log(`Server listening on port ${PORT}`));
 
-  setupSignalHandler((signal, code) => {
+  function exitHandler() {
     keepAliveWorker.stop();
     statusEvents.stop();
 
@@ -65,7 +79,13 @@ async function run() {
       new Promise((resolve) => server.close(resolve)),
       logout,
     ]);
+  }
+
+  statusEvents.on('error', (error) => {
+    console.error(error);
+    exitHandler();
   });
+  setupSignalHandler(exitHandler);
 }
 
 run().catch(error => {

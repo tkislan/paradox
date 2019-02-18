@@ -1,3 +1,20 @@
+FROM node:10.14-stretch-slim
+
+ENV HOME=/root
+ENV NODE_ENV=development
+
+WORKDIR $HOME/app
+
+ADD package.json package-lock.json $HOME/app/
+
+RUN npm install
+
+ADD .flowconfig $HOME/app/
+COPY src $HOME/app/src/
+
+RUN npm run flow
+
+
 FROM balenalib/raspberrypi3-node:10.14-stretch as builder
 
 ENV HOME=/root
@@ -9,9 +26,18 @@ ADD package.json package-lock.json $HOME/app/
 
 RUN ["cross-build-start"]
 
+RUN NODE_ENV=development npm install
+
+COPY . $HOME/app
+
+RUN npm run build
+
+RUN rm -rf node_modules
+
 RUN npm install
 
 RUN ["cross-build-end"]
+
 
 FROM arm32v6/node:10.15.0-alpine
 
@@ -22,7 +48,6 @@ WORKDIR $HOME/app
 
 COPY --from=builder $HOME/app/package.json $HOME/app/package.json
 COPY --from=builder $HOME/app/node_modules $HOME/app/node_modules
-
-COPY src $HOME/app/
+COPY --from=builder $HOME/app/build $HOME/app/
 
 CMD ["node", "app.js"]

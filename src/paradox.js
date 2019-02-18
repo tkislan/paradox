@@ -137,7 +137,7 @@ function d2h(d) {
 function rc4(key, text) {
     var i, x, y, t, temp, x2, kl;
     kl = key.length;
-    s = [];
+    var s = [];
     for (i = 0; i < 256; i++) {
         s[i] = i;
     }

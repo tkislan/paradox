@@ -1,3 +1,5 @@
+// @flow
+
 const { sendKeepAlive } = require('./api/status');
 
 function keepAlive() {

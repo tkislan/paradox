@@ -1,3 +1,5 @@
+// @flow
+
 const axios = require('axios');
 
 const { HOSTNAME } = require('../config');

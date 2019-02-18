@@ -1,3 +1,7 @@
+// @flow
+
+const { objectEntries } = require('./util');
+
 const SIGNALS = {
   'SIGHUP': 1,
   'SIGINT': 2,
@@ -5,15 +9,15 @@ const SIGNALS = {
 };
 
 
-function setupSignalHandler(cb) {
-  Object.entries(SIGNALS).forEach(([signal, code]) => {
+function setupSignalHandler(cb: () => Promise<any>) {
+  objectEntries(SIGNALS).forEach(([signal, code]) => {
     const exit = () => {
       process.exit(128 + code);
     };
 
     process.on(signal, () => {
       console.log(`Process received a ${signal} signal`);
-      cb(signal).then(() => {
+      cb().then(() => {
         exit();
       }, (error) => {
         console.error(error);

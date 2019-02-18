@@ -1,3 +1,5 @@
+// @flow
+
 const mqtt = require('mqtt');
 
 const { arm, disarm } = require('./api/alarm');
@@ -23,7 +25,7 @@ function getClient() {
 
       resolve(client);
     });
-    client.on('error', () => {
+    client.on('error', (error) => {
       clearTimeout(timeoutId);
       client.removeAllListeners(['connect', 'error']);
       console.error(error);
@@ -56,7 +58,7 @@ async function createMqttLink() {
   });
 
   return {
-    publish: (topic, message, options) => { console.log('publish', topic, message); client.publish(topic, message, options) },
+    publish: (topic: string, message: any, options?: Object) => { console.log('publish', topic, message); client.publish(topic, message, options) },
   };
 }
 
