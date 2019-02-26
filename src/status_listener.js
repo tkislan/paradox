@@ -78,7 +78,10 @@ function statusListener(zoneTuples: Array<[number, string]>) {
 
   return {
     on: (...args: any[]) => statusEventEmitter.on(...args),
-    stop: () => clearInterval(intervalId),
+    stop: () => {
+      clearInterval(intervalId);
+      statusEventEmitter.removeAllListeners();
+    },
   };
 }
 

@@ -83,7 +83,7 @@ async function run() {
 
   statusEvents.on('error', (error) => {
     console.error(error);
-    exitHandler();
+    process.exit(1);
   });
   setupSignalHandler(exitHandler);
 }
