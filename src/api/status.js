@@ -38,7 +38,8 @@ async function getParadoxStatus() {
   return [
     getJsValue(statusPage, STATUSZONE_VALUE_RE),
     getJsValue(statusPage, USERACCESS_VALUE_RE),
-    getJsValue(statusPage, ALARMS_VALUE_RE),
+    // getJsValue(statusPage, ALARMS_VALUE_RE),
+    [0]
   ];
 }
 
