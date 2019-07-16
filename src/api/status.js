@@ -8,7 +8,7 @@ const { getJsValue } = require('../util');
 
 const STATUSZONE_VALUE_RE = /tbl_statuszone[ ]+=[ ]+(new Array\((?:\d,?)*\))/m;
 const USERACCESS_VALUE_RE = /tbl_useraccess[ ]+=[ ]+(new Array\((?:\d,?)*\))/m;
-const ALARMS_VALUE_RE = /tbl_alarmes[ ]+=[ ]+(new Array\((?:\d,?)*\))/m;
+const ALARMS_VALUE_RE = /tbl_alarmes[ ]+=[ ]+(new Array\((?:"\d",?)*\))/m;
 
 
 async function getStatusPage() {
