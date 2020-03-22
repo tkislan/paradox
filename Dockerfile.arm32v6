@@ -39,7 +39,7 @@ RUN npm install
 RUN ["cross-build-end"]
 
 
-FROM arm32v6/node:10.15.0-alpine
+FROM arm32v7/node:10.19.0-stretch-slim
 
 ENV HOME=/root
 ENV NODE_ENV=production
