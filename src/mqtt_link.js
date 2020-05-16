@@ -4,14 +4,14 @@ const mqtt = require('mqtt');
 
 const { arm, disarm } = require('./api/alarm');
 
-const { MQTT_HOSTNAME, MQTT_PORT } = require('./config');
+const { MQTT_HOSTNAME, MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD } = require('./config');
 
 const COMMAND_ARM_TOPIC = 'paradox/command/arm';
 const COMMAND_DISARM_TOPIC = 'paradox/command/disarm';
 
 function getClient() {
   return new Promise((resolve, reject) => {
-    const client = mqtt.connect(`mqtt://${MQTT_HOSTNAME}:${MQTT_PORT}`);
+    const client = mqtt.connect(`mqtt://${MQTT_USERNAME}:${MQTT_PASSWORD}@${MQTT_HOSTNAME}:${MQTT_PORT}`);
 
     const timeoutId = setTimeout(() => reject(new Error('MQTT connect timeout')), 5000);
 

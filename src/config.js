@@ -9,6 +9,8 @@ type EnvironmentVariables = {
   PORT: string,
   MQTT_HOSTNAME: string,
   MQTT_PORT: string,
+  MQTT_USERNAME: string,
+  MQTT_PASSWORD: string,
 };
 
 function parseEnvironment(): EnvironmentVariables {
