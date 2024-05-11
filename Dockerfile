@@ -1,18 +1,28 @@
-FROM node:10.15.0-alpine
+FROM node:10.14-stretch-slim as base
 
+USER node
 ENV HOME=/home/node
-ENV NODE_ENV=production
-
 WORKDIR $HOME/app
+
+FROM base as builder
 
 ADD package.json package-lock.json $HOME/app/
 
 RUN npm install
 
-COPY src $HOME/app/
+COPY . $HOME/app/
 
-RUN chown -R node:node $HOME/app
+RUN npm run flow
+RUN npm run build
 
-USER node
+FROM base as prod
+
+ENV NODE_ENV=production
+
+COPY package.json package-lock.json $HOME/app/
+
+RUN npm install
+
+COPY --from=builder $HOME/app/build $HOME/app/
 
 CMD ["node", "app.js"]
