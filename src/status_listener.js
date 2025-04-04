@@ -40,6 +40,12 @@ function statusListener(zoneTuples: Array<[number, string]>) {
     armed: isArmed(),
     sensors: getSensorStatus(zoneTuples),
   };
+  statusEventEmitter.emit('armedChanged', prevStatus.armed);
+  for (let i = 0; i < zoneTuples.length; i += 1) {
+    const index = `${i}`;
+    statusEventEmitter.emit('sensorChanged', index, prevStatus.sensors[index]);
+  }
+  
   let prevRawStatus = { statuszone: [], useraccess: [], alarms: [] };
   const intervalId = setInterval(async () => {
     let rawStatus;
