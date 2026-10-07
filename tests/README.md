@@ -5,7 +5,7 @@ native Python Home Assistant integration) can be checked against it. It never ed
 
 ## Running
 
-The suite is its own npm project (vitest needs Node >= 22; production stays on Node 10.14).
+The suite is its own npm project (vitest needs Node >= 22).
 
 ```sh
 cd tests
@@ -29,8 +29,8 @@ source maps so coverage maps back onto `src/`). The root project must have its d
 
 Set `PARADOX_BUILD_DIR=<absolute path>` to run against an existing build directory without rebuilding
 (parallel runs, mutation checks). Set `PARADOX_NODE=<path to a node binary>` to run the child-process tests
-(`system/process.test.js`) on another runtime, e.g. the production one:
-`PARADOX_NODE=$HOME/.nvm/versions/node/v10.14.2/bin/node npx vitest run system/process.test.js`.
+(`system/process.test.js`) on another runtime, e.g. an older Node line:
+`PARADOX_NODE=$HOME/.nvm/versions/node/v22.23.3/bin/node npx vitest run system/process.test.js`.
 
 ## Coverage
 
@@ -38,7 +38,7 @@ Set `PARADOX_BUILD_DIR=<absolute path>` to run against an existing build directo
 (`app.js:43`, the value is always a boolean) and `initSensorStatus` (`status_listener.js:26-28`, never called).
 Everything else (`util.sleep`, the `playground.js` script, the shutdown-callback rejection path, ...) is covered.
 `system/process.test.js` runs the bridge as a child process, which vitest's coverage cannot see; it adds
-evidence about exit codes, real signals and the Node 10.14 runtime, not coverage numbers.
+evidence about exit codes and real signals, not coverage numbers.
 
 ## Layout
 

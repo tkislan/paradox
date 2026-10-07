@@ -21,8 +21,7 @@ import { BUILD_DIR, onCleanup, reservePort, settle, waitFor } from '../support.j
  * through broker.proxy(). Broker-side observations come from Mosquitto's log, which lags the connections:
  * waitFor what is expected and syncLog() before asserting that something did NOT happen.
  *
- * PARADOX_NODE selects the runtime of the child (the production one is Node 10.14); vitest itself
- * always runs on the newer Node. Assertions rely on the bridge's own messages and exit codes, not on
+ * PARADOX_NODE selects the runtime of the child (default: the Node running vitest). Assertions rely on the bridge's own messages and exit codes, not on
  * Node's wording, except where a test says it branches on the child's major version.
  */
 
@@ -527,7 +526,7 @@ describe('bridge process', () => {
 
       expect(published()).toEqual(['paradox/status/armed OFF', 'paradox/status/armed ON', 'paradox/status/armed OFF']);
       expect(ctx.bridge.result).toBeNull();
-      // Node 10 (production) only warns about an unhandled rejection and keeps running, so the exit check above would not see it.
+      // Node before 15 only warns about an unhandled rejection and keeps running, so the exit check above would not see it.
       expect(ctx.bridge.stderr).not.toContain('Unhandled');
     }, TEST_TIMEOUT);
 

@@ -1,4 +1,4 @@
-FROM node:10.14-stretch-slim as base
+FROM node:24-bookworm-slim as base
 
 USER node
 ENV HOME=/home/node
@@ -8,7 +8,7 @@ FROM base as builder
 
 ADD package.json package-lock.json $HOME/app/
 
-RUN npm install
+RUN npm ci
 
 COPY . $HOME/app/
 
@@ -21,7 +21,7 @@ ENV NODE_ENV=production
 
 COPY package.json package-lock.json $HOME/app/
 
-RUN npm install
+RUN npm ci
 
 COPY --from=builder $HOME/app/build $HOME/app/
 
