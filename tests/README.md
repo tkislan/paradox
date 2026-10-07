@@ -11,10 +11,16 @@ The suite is its own npm project (vitest needs Node >= 22; production stays on N
 cd tests
 nvm use            # tests/.nvmrc -> Node 24
 npm ci
-npm test           # builds src/ with the repo's Babel, runs vitest with v8 coverage (report: tests/coverage)
+npm test           # starts the Mosquitto brokers, builds src/ with the repo's Babel, runs vitest with v8 coverage
 ```
 
-About 920 tests, 40 s. In agent/CI environments vitest may pick a reporter that hides console output; use
+**Docker is required**: the MQTT tests run against real Mosquitto brokers started from
+`tests/docker-compose.yml` (24 isolated containers of `eclipse-mosquitto:2`, about 5 s to start; the first run
+pulls the image). `npm test` starts them if needed and removes them afterwards. `PARADOX_KEEP_BROKERS=1` leaves
+them running (watch mode, several runs in parallel); `MOSQUITTO_REPLICAS` changes their number. Runs never
+recreate running containers, so after editing the compose file run `docker compose down` in `tests/` first.
+
+About 915 tests, 65 s. In agent/CI environments vitest may pick a reporter that hides console output; use
 `npx vitest run --reporter=default` to see whether a change made the suite noisy (it must stay silent).
 
 `npm test` first compiles `src/` to `tests/.build/` (the same Babel output `npm run build` ships, plus
@@ -41,10 +47,10 @@ evidence about exit codes, real signals and the Node 10.14 runtime, not coverage
 | `spec/*.json`, `spec/crypto_reference.py` | Language-neutral case tables and an independent Python reference. **This is the part to reuse from Python.** `crypto` (vectors), `util`, `config`, `status_pages` (panel page -> parsed status), `login_cases` (panel responses -> zones or error), `status_machine` (poll sequence -> events), `mqtt`, `system_scenarios` (whole-bridge timelines). |
 | `data/*.html` | Real pages captured from a panel. Spec files reference them by path. |
 | `mock_paradox.js` | Fake panel: the HTTP contract the bridge needs, as a pure `handle()` plus a loopback server. |
-| `mock_mqtt.js` | Fake MQTT 3.1.1 broker speaking the real wire protocol. |
+| `docker-compose.yml`, `mosquitto/mosquitto.conf`, `mosquitto.js` | Real Mosquitto brokers as test fixtures: lease, observation, users, TCP proxy for faults (see "MQTT tests" below). |
 | `support.js` | Loader for the built bridge, env, console/exit/signal/timer helpers. |
 | `unit/` | One module at a time, driven by `spec/` tables where the cases are data. |
-| `wire/` | `api/*` and `mqtt_link` against the fake panel / broker; assertions on requests and packets as sent. |
+| `wire/` | `api/*` and `mqtt_link` against the fake panel / a real broker; assertions on requests, messages and broker-side events. |
 | `system/` | The whole bridge (`app.js`) in-process and as a child process. |
 
 ## Conventions
@@ -52,7 +58,7 @@ evidence about exit codes, real signals and the Node 10.14 runtime, not coverage
 - **Pin current behavior.** A test asserts what the code does now. Bugs and quirks are pinned too, titled
   `KNOWN BUG KB-n: ...` (catalog below) and tagged `"known_bug": "KB-n"` in spec files. A port decides per
   entry whether to keep or fix the behavior; the catalog says what the sensible fix is.
-- **Black box at the lowest observable boundary**: HTTP requests/responses, MQTT packets, REST responses,
+- **Black box at the lowest observable boundary**: HTTP requests/responses, MQTT messages and broker events, REST responses,
   `process.exit` codes. No `vi.mock` of modules (it cannot intercept the CommonJS `require` graph and would
   tie tests to the implementation). Console output is not contractual; capture it to keep runs quiet.
 - **Expected values are literals or `spec/` entries**, never computed by the code under test.
@@ -61,9 +67,28 @@ evidence about exit codes, real signals and the Node 10.14 runtime, not coverage
   also what `pytest.mark.parametrize` over the same file looks like.
 - **Time**: the bridge's own timers (1 s poll, 3 s keep-alive, 5 s MQTT connect timeout) run on a fake clock
   (`useFakeClock`); sockets are real. Wait for effects with `waitFor`; `settle()` is only for "nothing
-  happened" assertions.
+  happened" assertions, and with a broker only after `broker.syncLog()` (the broker log lags the connection).
 - **Isolation**: `setBridgeEnv()` before `loadBridge()` (config.js reads the environment once at require time).
   Harness objects register their own cleanup; process signal listeners need `isolateProcessListeners()`.
+
+## MQTT tests: real Mosquitto
+
+The bridge hard-codes its topics, so tests that run in parallel cannot share a broker. `leaseBroker()`
+(`mosquitto.js`) gives a test exclusive use of one of the 24 compose replicas until the test ends (claims are
+atomic directories in the OS temp dir, so parallel test files and processes cooperate); the broker is reset
+afterwards. Mosquitto reports less than a hand-written fake could, so the harness reads what it can:
+
+| Need | Where it comes from |
+| --- | --- |
+| Messages the bridge published (topic, payload, QoS, retain flag as set) | `broker.published`, via an MQTT 5 observer with retain-as-published; `broker.retained(topic)` is what a new subscriber gets |
+| Connect (protocol level, clean session, keepalive, will), subscriptions with QoS, denied subscriptions, CONNACK codes, disconnects, client publishes | `broker.connects`, `subscriptions`, `deniedSubscriptions`, `connacks`, `disconnects`, `clientPublishes`: parsed from Mosquitto's log, which lags the connection. Always `waitFor`, and `await broker.syncLog()` before asserting that something did *not* happen |
+| Credentials | never in the broker log. `broker.addUser()` creates (through the dynamic security plugin) the account the test expects the bridge to authenticate as; success is the evidence. A refused login is CONNACK 5, never 4. `proxy.connects` shows what was sent |
+| Other clients, kicked sessions, users that may not subscribe | `broker.publish()`, `broker.kick()`, `broker.addUser({ subscribe: false })` |
+| Faults Mosquitto cannot produce (refused or silent connections, forged CONNACK, malformed bytes, cut sockets) | `broker.proxy()`: a TCP relay in front of the broker with `stop()`/`start(port)`, `blackhole()`, `replyWith(bytes)`, `inject(bytes)`, `dropConnections()`, `accepted`, `connects` |
+
+The harness's own MQTT client (the `mqtt5` alias of `mqtt@5`; the bridge keeps using the root's `mqtt@2`, which
+`unit/dependencies.test.js` guards) has no keepalive or reconnect timers, so the fake clock cannot freeze it.
+`vitest -t` matches only the first 40 characters of a `$title` test name.
 
 ## Porting to Python
 
@@ -83,7 +108,7 @@ projects), then the parsing tables (`status_pages`, `login_cases`), then `status
 | `crypto_reference.py` | start of the client library; `python3 -I spec/crypto_reference.py` checks all vectors |
 | `FakePanel.handle(request)` | an `aioclient_mock` callback or `aiohttp` test server around the same function |
 | `FakePanel.requestLines` assertions | the exact URLs the client must request, in order |
-| `FakeBroker` | only needed if the port keeps MQTT; Home Assistant has its own MQTT test helpers |
+| Mosquitto fixtures | only if the port keeps MQTT; Home Assistant has its own MQTT test helpers (`mqtt_mock`). The `mqtt.json` rows describe outcomes, not packets |
 
 ## Mutation checks
 
@@ -93,7 +118,7 @@ A test is only worth keeping if a realistic bug breaks it. To check by hand:
 cd tests
 cp -r .build .mutants/m1                      # .mutants/ is git-ignored; it must live inside the repo so axios etc. resolve
 $EDITOR .mutants/m1/util.js                   # flip a branch, change a constant, drop a statement
-PARADOX_BUILD_DIR=$PWD/.mutants/m1 npx vitest run unit/util.test.js   # must fail
+PARADOX_KEEP_BROKERS=1 PARADOX_BUILD_DIR=$PWD/.mutants/m1 npx vitest run unit/util.test.js   # must fail
 ```
 
 ## Known bugs and quirks (pinned)
