@@ -1,0 +1,375 @@
+{
+  "_comment": "Golden vectors for the Paradox web-UI login crypto. Expected values come from crypto_reference.py (hashlib for MD5) and were cross-checked against src/paradox.js; entries with js_only are not reproducible by the reference because the original misbehaves. Entries with a source field are published by independent projects.",
+  "hex_md5": [
+    {
+      "name": "empty string (RFC 1321)",
+      "input": "",
+      "expected": "D41D8CD98F00B204E9800998ECF8427E"
+    },
+    {
+      "name": "a (RFC 1321)",
+      "input": "a",
+      "expected": "0CC175B9C0F1B6A831C399E269772661"
+    },
+    {
+      "name": "abc (RFC 1321)",
+      "input": "abc",
+      "expected": "900150983CD24FB0D6963F7D28E17F72"
+    },
+    {
+      "name": "message digest (RFC 1321)",
+      "input": "message digest",
+      "expected": "F96B697D7CB7938D525A2F31AAF161D0"
+    },
+    {
+      "name": "lowercase alphabet (RFC 1321)",
+      "input": "abcdefghijklmnopqrstuvwxyz",
+      "expected": "C3FCD3D76192E4007DFB496CCA67E13B"
+    },
+    {
+      "name": "alphanumerics (RFC 1321)",
+      "input": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789",
+      "expected": "D174AB98D277D9F5A5611C2C9F419D9F"
+    },
+    {
+      "name": "80 digits (RFC 1321)",
+      "input": "12345678901234567890123456789012345678901234567890123456789012345678901234567890",
+      "expected": "57EDF4A22BE3C955AC49DA2E2107B67A"
+    },
+    {
+      "name": "55 chars, last length that fits one block with padding",
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expected": "EF1772B6DFF9A122358552954AD0DF65"
+    },
+    {
+      "name": "56 chars, length field spills into a second block",
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expected": "3B0C8AC703F828B04C6C197006D17218"
+    },
+    {
+      "name": "57 chars",
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expected": "652B906D60AF96844EBD21B674F35E93"
+    },
+    {
+      "name": "63 chars",
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expected": "B06521F39153D618550606BE297466D5"
+    },
+    {
+      "name": "64 chars, exactly one block",
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expected": "014842D480B571495A4A0363793F7367"
+    },
+    {
+      "name": "65 chars",
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expected": "C743A45E0D2E6A95CB859ADAE0248435"
+    },
+    {
+      "name": "119 chars",
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expected": "8A7BD0732ED6A28CE75F6DABC90E1613"
+    },
+    {
+      "name": "120 chars",
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expected": "5F61C0CCAD4CAC44C75FF505E1F1E537"
+    },
+    {
+      "name": "128 chars, exactly two blocks",
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expected": "E510683B3F5FFE4093D021808BC6FF70"
+    },
+    {
+      "name": "latin-1 char above ASCII (low byte 0xE9)",
+      "input": "\u00e9",
+      "expected": "3406877694691DDD1DFB0ACA54681407"
+    },
+    {
+      "name": "char above 0xFF keeps only its low byte (U+0100 hashes like NUL)",
+      "input": "\u0100",
+      "expected": "93B885ADFE0DA089CDF634904FD59F71"
+    },
+    {
+      "name": "U+0141 hashes like 'A'",
+      "input": "\u0141",
+      "expected": "7FC56270E7A70FA81A5935B72EACBE29"
+    },
+    {
+      "name": "polish word, mixed latin-1 and wide chars",
+      "input": "\u017c\u00f3\u0142\u0107",
+      "expected": "7E03542F853066FE3E0659F8D871D8DE"
+    },
+    {
+      "name": "astral emoji counts as two UTF-16 units",
+      "input": "\ud83d\ude00",
+      "expected": "C151C5FA0F424DBF71E349896C45EC16"
+    },
+    {
+      "name": "embedded NUL",
+      "input": "a\u0000b",
+      "expected": "70350F6027BCE3713F6B76473084309B"
+    }
+  ],
+  "keeplowbyte": [
+    {
+      "name": "empty",
+      "input": "",
+      "expected": ""
+    },
+    {
+      "name": "ascii unchanged",
+      "input": "paradox",
+      "expected": "paradox"
+    },
+    {
+      "name": "latin-1 unchanged",
+      "input": "caf\u00e9",
+      "expected": "caf\u00e9"
+    },
+    {
+      "name": "U+0141 becomes 'A'",
+      "input": "\u0141",
+      "expected": "A"
+    },
+    {
+      "name": "U+0100 becomes NUL",
+      "input": "\u0100",
+      "expected": "\u0000"
+    },
+    {
+      "name": "U+FFFF becomes 0xFF",
+      "input": "\uffff",
+      "expected": "\u00ff"
+    },
+    {
+      "name": "astral emoji becomes two low bytes",
+      "input": "\ud83d\ude00",
+      "expected": "=\u0000"
+    },
+    {
+      "name": "polish word",
+      "input": "\u017c\u00f3\u0142\u0107",
+      "expected": "|\u00f3B\u0007"
+    }
+  ],
+  "rc4": [
+    {
+      "name": "published vector (Vera plugin comment): differs from classic RC4",
+      "key": "ThisIsTheKeyText",
+      "text": "SomePlainTextToEncode",
+      "expected": "97CB570A47F30A423F0BE579B3B6DD338DA2E9FECA",
+      "not_classic_rc4": "059577E3F29C2C6C7BC033CCC9238ECCB4AF648949",
+      "source": "a-lurker/Vera-Plugin-Paradox-IP150-wps, comment in the Lua source"
+    },
+    {
+      "name": "empty text",
+      "key": "key",
+      "text": "",
+      "expected": ""
+    },
+    {
+      "name": "empty key, empty text",
+      "key": "",
+      "text": "",
+      "expected": ""
+    },
+    {
+      "name": "empty key",
+      "key": "",
+      "text": "user",
+      "expected": "75716075"
+    },
+    {
+      "name": "single char",
+      "key": "k",
+      "text": "u",
+      "expected": "1E"
+    },
+    {
+      "name": "short key and text",
+      "key": "key",
+      "text": "user",
+      "expected": "397D46DC"
+    },
+    {
+      "name": "output bytes below 0x10 are zero padded",
+      "key": "Secret",
+      "text": "Attack at dawn",
+      "expected": "34CD7BF60D993178750C53583C37"
+    },
+    {
+      "name": "realistic 48 char key (md5 hex + session value)",
+      "key": "5F4DCC3B5AA765D61D8327DEB882CF9991AC25D06A0C26BA",
+      "text": "user",
+      "expected": "D29AC468"
+    },
+    {
+      "name": "text longer than 256 chars wraps the state index",
+      "key": "key",
+      "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "expected": "34765BD6CBC1B8B0A9A39E8A8778645489371A0EF3D9C0A891D370422F21FEE6BB9DB18D4C6CE6BE9792A108E56F89BCDAFCCF93DB81F5BD86BE4254B59F51DFE6663B491AC6FB616D82B7FDFA89050E68E6ED95A1D38F42938F702F18490E1A27B5399FC465DB7AB99E84C7EFBE036137B8113A46BD86D9CAC868A6D011416D07FED00AB975C94F269C6CB877F70F62DE52D6679FBF0CD7EE8C4E82F058070BEA3C0EC345119F71C5D89C4525980D47D6626D82954AB3943A10F893BDFD457ACB303A5F57799060DE2BB6686FFF23F634BD901BC39401C82A1CB6B30C056F2EBD5AD468072C89AE1DB56797B9D70D977BEA61FC29FEFF0F42FCDA3D5F1C7E7F67973E8DA068AC5BF667C613B08B9C4470B9092BEDFC736DCAE7DCF96C75E1FBEC47C66F20CC6E850DFC89C9"
+    },
+    {
+      "name": "256 char key is the longest defined",
+      "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "text": "user",
+      "expected": "09E6D718"
+    },
+    {
+      "name": "key chars above 0xFF use their full code unit in the schedule",
+      "key": "\u0141\u0142",
+      "text": "user",
+      "expected": "F179AEBD"
+    },
+    {
+      "name": "text chars above 0xFF yield 3 hex digits",
+      "key": "key",
+      "text": "\u0100\u0141",
+      "expected": "14C14F"
+    },
+    {
+      "name": "astral emoji text counts as two units",
+      "key": "key",
+      "text": "\ud83d\ude00",
+      "expected": "D871DE0E"
+    },
+    {
+      "name": "all byte values as text",
+      "key": "key",
+      "text": "\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\u007f\u0080\u0081\u0082\u0083\u0084\u0085\u0086\u0087\u0088\u0089\u008a\u008b\u008c\u008d\u008e\u008f\u0090\u0091\u0092\u0093\u0094\u0095\u0096\u0097\u0098\u0099\u009a\u009b\u009c\u009d\u009e\u009f\u00a0\u00a1\u00a2\u00a3\u00a4\u00a5\u00a6\u00a7\u00a8\u00a9\u00aa\u00ab\u00ac\u00ad\u00ae\u00af\u00b0\u00b1\u00b2\u00b3\u00b4\u00b5\u00b6\u00b7\u00b8\u00b9\u00ba\u00bb\u00bc\u00bd\u00be\u00bf\u00c0\u00c1\u00c2\u00c3\u00c4\u00c5\u00c6\u00c7\u00c8\u00c9\u00ca\u00cb\u00cc\u00cd\u00ce\u00cf\u00d0\u00d1\u00d2\u00d3\u00d4\u00d5\u00d6\u00d7\u00d8\u00d9\u00da\u00db\u00dc\u00dd\u00de\u00df\u00e0\u00e1\u00e2\u00e3\u00e4\u00e5\u00e6\u00e7\u00e8\u00e9\u00ea\u00eb\u00ec\u00ed\u00ee\u00ef\u00f0\u00f1\u00f2\u00f3\u00f4\u00f5\u00f6\u00f7\u00f8\u00f9\u00fa\u00fb\u00fc\u00fd\u00fe\u00ff",
+      "expected": "4C0F21ADB7BCC6CFD9D2ECF9F30D1223E15E70659FB4AEC7F1B212214B449881E3C4EBD61031B8E1C7C3F35BB13ADFEB92B585D897CCBBF2C6FF0017F1DA1798DE5F017226FBC55E5DB385CECEBC333940CFC7BE8DFEA16DB3AE520C3C6C283D3FAC2384D878C565A98F96D4FBAB15763FB11B314AB088D6CAC96AA5D414476AFF072AF1458837B0D66D9E4B8302F99536BB3C8C7352E2380E6DAC6114BDE1EC32E5D41899CC41AE15094E96F14DDB901EABA74959877D5BFAD13A50793883BD738980E4EBC42EDF6E9A04DBDB4A95419C143AB06F39AF678ABD1410A8A0C98925C34EF39BB117318D24F5042D429B00F363EB77A5737180C27D58BEDB99F8F8"
+    },
+    {
+      "name": "key longer than 256 chars corrupts the state (NaN) in the original code",
+      "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "text": "user",
+      "expected": "71766375",
+      "js_only": true
+    }
+  ],
+  "credentials": [
+    {
+      "name": "published vector (NUnit test of an independent client driving the device's own JS)",
+      "session": "52C2BA535E51C1A1",
+      "username": "8888",
+      "password": "TESThash",
+      "u": "B4A672AE",
+      "p": "DB2916A7C33D423D70B0D73DFD198B25",
+      "source": "tracstarr/ParadoxAlarmControl, ParadoxIpTest/HashComputeTests.cs @ d2fadaf, lines 12-15"
+    },
+    {
+      "name": "sample session, 4 digit code",
+      "session": "91AC25D06A0C26BA",
+      "username": "user",
+      "password": "1234",
+      "u": "EBA2095C",
+      "p": "82016AC9BD9B087D6C393B19C756B255"
+    },
+    {
+      "name": "playground session",
+      "session": "A86572A01074210A",
+      "username": "user",
+      "password": "1234",
+      "u": "87E973C2",
+      "p": "2FB788E0C53B0F6668F9BF79698B8B6D"
+    },
+    {
+      "name": "all zero session",
+      "session": "0000000000000000",
+      "username": "master",
+      "password": "paradox",
+      "u": "EE18D2FF9B4C",
+      "p": "46189B084D7A707EAB025225933211FF"
+    },
+    {
+      "name": "all F session",
+      "session": "FFFFFFFFFFFFFFFF",
+      "username": "admin",
+      "password": "secret",
+      "u": "3E3DBB5B2C",
+      "p": "0A242CB50C463499D50A72F14BF0D068"
+    },
+    {
+      "name": "6 digit code",
+      "session": "91AC25D06A0C26BA",
+      "username": "user",
+      "password": "654321",
+      "u": "26B1C3D0",
+      "p": "B100B3EDF90F91099F99098305136856"
+    },
+    {
+      "name": "single char username",
+      "session": "91AC25D06A0C26BA",
+      "username": "a",
+      "password": "1234",
+      "u": "FF",
+      "p": "82016AC9BD9B087D6C393B19C756B255"
+    },
+    {
+      "name": "empty username",
+      "session": "91AC25D06A0C26BA",
+      "username": "",
+      "password": "1234",
+      "u": "",
+      "p": "82016AC9BD9B087D6C393B19C756B255"
+    },
+    {
+      "name": "empty password",
+      "session": "91AC25D06A0C26BA",
+      "username": "user",
+      "password": "",
+      "u": "FF76C305",
+      "p": "9638491F7F167B8C79B36ADF01CDBB0D"
+    },
+    {
+      "name": "punctuation in password",
+      "session": "91AC25D06A0C26BA",
+      "username": "user",
+      "password": "p@ss:w0rd/#?",
+      "u": "D9742858",
+      "p": "365E57BB021C1C5BECCB3354A345BFD6"
+    },
+    {
+      "name": "long username and password",
+      "session": "A86572A01074210A",
+      "username": "administrator-account-01",
+      "password": "correct horse battery staple 42",
+      "u": "190B865D5E772853950CC680FD3CE2C420CDA7109E08B014",
+      "p": "86DEC7C0F4E24C250E6C0A1B9B45B404"
+    },
+    {
+      "name": "latin-1 username",
+      "session": "91AC25D06A0C26BA",
+      "username": "\u00dcn\u00ef",
+      "password": "1234",
+      "u": "42BF83",
+      "p": "82016AC9BD9B087D6C393B19C756B255"
+    },
+    {
+      "name": "password with wide chars is reduced to low bytes first",
+      "session": "91AC25D06A0C26BA",
+      "username": "user",
+      "password": "\u017c\u00f3\u0142\u0107",
+      "u": "1AAC963F",
+      "p": "89631543ED6CD2903235E74C635A1D5C"
+    },
+    {
+      "name": "password U+0141 equals password A",
+      "session": "A86572A01074210A",
+      "username": "user",
+      "password": "\u0141",
+      "u": "33E28A33",
+      "p": "4A2287E5370212B755CCE9DAF830BBEB"
+    },
+    {
+      "name": "astral emoji in username",
+      "session": "91AC25D06A0C26BA",
+      "username": "\ud83d\ude00",
+      "password": "1234",
+      "u": "D8A3DED1",
+      "p": "82016AC9BD9B087D6C393B19C756B255"
+    }
+  ]
+}

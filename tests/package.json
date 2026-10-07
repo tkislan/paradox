@@ -1,0 +1,17 @@
+{
+  "name": "paradox-bridge-tests",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "test": "vitest run --coverage",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^5.0.3",
+    "mqtt-packet": "^9.0.2",
+    "vitest": "^5.0.3"
+  }
+}
