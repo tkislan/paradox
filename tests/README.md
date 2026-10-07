@@ -5,32 +5,32 @@ native Python Home Assistant integration) can be checked against it. It never ed
 
 ## Running
 
-The suite is its own npm project (vitest needs Node >= 22).
+From the repository root (vitest is a dev dependency of the root project; Node 24 per `.nvmrc`):
 
 ```sh
-cd tests
-nvm use            # tests/.nvmrc -> Node 24
+nvm use
 npm ci
 npm test           # starts the Mosquitto brokers, builds src/ with the repo's Babel, runs vitest with v8 coverage
+npx vitest run unit/util   # a subset: file name filters work from the root
 ```
 
 **Docker is required**: the MQTT tests run against real Mosquitto brokers started from
 `tests/docker-compose.yml` (24 isolated containers of `eclipse-mosquitto:2`, about 5 s to start; the first run
 pulls the image). `npm test` starts them if needed and removes them afterwards. `PARADOX_KEEP_BROKERS=1` leaves
 them running (watch mode, several runs in parallel); `MOSQUITTO_REPLICAS` changes their number. Runs never
-recreate running containers, so after editing the compose file run `docker compose down` in `tests/` first.
+recreate running containers, so after editing the compose file run `docker compose -f tests/docker-compose.yml down` first.
 
 About 915 tests, 65 s. In agent/CI environments vitest may pick a reporter that hides console output; use
 `npx vitest run --reporter=default` to see whether a change made the suite noisy (it must stay silent).
 
 `npm test` first compiles `src/` to `tests/.build/` (the same Babel output `npm run build` ships, plus
-source maps so coverage maps back onto `src/`). The root project must have its dependencies installed
-(`npm install` in the repo root) because the bridge `require`s axios, express and mqtt from there.
+source maps so coverage maps back onto `src/`). The bridge under test `require`s axios, express and mqtt
+from the root `node_modules`, i.e. the versions production installs.
 
 Set `PARADOX_BUILD_DIR=<absolute path>` to run against an existing build directory without rebuilding
 (parallel runs, mutation checks). Set `PARADOX_NODE=<path to a node binary>` to run the child-process tests
 (`system/process.test.js`) on another runtime, e.g. an older Node line:
-`PARADOX_NODE=$HOME/.nvm/versions/node/v22.23.3/bin/node npx vitest run system/process.test.js`.
+`PARADOX_NODE=$HOME/.nvm/versions/node/v22.23.3/bin/node npx vitest run system/process`.
 
 ## Coverage
 
@@ -115,10 +115,9 @@ projects), then the parsing tables (`status_pages`, `login_cases`), then `status
 A test is only worth keeping if a realistic bug breaks it. To check by hand:
 
 ```sh
-cd tests
-cp -r .build .mutants/m1                      # .mutants/ is git-ignored; it must live inside the repo so axios etc. resolve
-$EDITOR .mutants/m1/util.js                   # flip a branch, change a constant, drop a statement
-PARADOX_KEEP_BROKERS=1 PARADOX_BUILD_DIR=$PWD/.mutants/m1 npx vitest run unit/util.test.js   # must fail
+cp -r tests/.build tests/.mutants/m1          # .mutants/ is git-ignored; it must live inside the repo so axios etc. resolve
+$EDITOR tests/.mutants/m1/util.js             # flip a branch, change a constant, drop a statement
+PARADOX_KEEP_BROKERS=1 PARADOX_BUILD_DIR=$PWD/tests/.mutants/m1 npx vitest run unit/util   # must fail
 ```
 
 ## Known bugs and quirks (pinned)

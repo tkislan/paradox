@@ -1,10 +1,6 @@
 import { configDefaults, defineConfig } from 'vitest/config';
-import { fileURLToPath } from 'node:url';
-
-const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
 export default defineConfig({
-  root: repoRoot,
   test: {
     include: ['tests/**/*.test.js'],
     exclude: [...configDefaults.exclude, 'tests/.mutants/**'],
