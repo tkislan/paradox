@@ -1,0 +1,819 @@
+{
+  "_comment": "End-to-end timelines of the whole bridge (src/app.js and everything it wires together) against a fake panel and a fake MQTT broker. Each row of a group is one scenario: the bridge is started, then 'steps' are played in order. Setup: 'login' holds the bridge env USERNAME/PASSWORD, the session value the panel hands out and the u/p the panel accepts for that session (an independent copy of a crypto.json vector, so this file stays self-contained); panel has requireLogin on and the default six zones Predsien, Lava izba, Prava izba, Spalna, Obyvacka, Chodba, status tables of 32 zeros, useraccess [1, 0]; time is simulated: 'advance_ms' moves the clock of the bridge's own timers (poll 1000 ms, keep-alive 3000 ms, MQTT connect timeout 5000 ms) and then waits for the real network effects. Row keys: name, known_bug?, note?, panel?, broker?, start?, steps?. panel: zones ([enabled, name] pairs), statuszone, useraccess, accept_login (false: every login is rejected), down (true: panel is not reachable at startup), faults (list of {path, kind, times?} active from the start; times omitted = for ever). Fault kinds: http_500 (HTTP 500), reset (connection reset before any response), hang (request never answered), login_page (HTTP 200 with the login page), garbage (HTTP 200 with a page that has no status tables), wrong_title (HTTP 200 with a well-formed page titled something else than 'Paradox IP Module'), page (HTTP 200 with the fault's own 'page': an inline string or {file: path relative to tests/}). broker: accept_credentials (false: CONNACK 'bad credentials'), silent (never answers CONNECT), down (true: nothing listens on the broker port), retained ({topic: payload} replayed on SUBSCRIBE). start: ready (default true: wait until the REST port accepts connections; false: startup is expected to fail or hang) and expect (checked once startup is over). Step actions, applied in this order within a step: panel_status ({statuszone?, useraccess?, alarms?} the panel serves from now on), panel_fault (same shape as a fault), panel_expire_session, panel_down, broker_drop_clients, mqtt_command ('arm' | 'disarm' | {topic, payload}: 'arm' is topic paradox/command/arm with an empty payload; a message the broker delivers to the bridge's subscription), mqtt_message ({topic, payload}: delivered to the bridge's connection even if the bridge did not subscribe to the topic), signal (SIGHUP | SIGINT | SIGTERM delivered to the process), rest ({method, path} request to the bridge's REST API), advance_ms. Expectations (expect) describe what happened DURING that step, i.e. since the previous check; absent keys mean 'nothing': mqtt_published (messages the bridge published, in order; all are QoS 0, retained as listed), panel_requests (request lines the panel received, in order; at startup absent means not checked), panel_requests_any_order (the same compared as a multiset, for timers firing in the same tick), panel_request_counts ({request line: how many times}, for long stretches of time), process_exit (exit codes passed to process.exit, in order), logged_error (true: at least one error-level log entry was written during the step, false: none; log text is otherwise not contractual, but a failure described as 'only logged' must be logged), rest_response ({status, body?}; body is the parsed JSON, or the text for non-JSON), and, as absolute states at the end of the step, broker_connects (number of CONNECT packets the broker has seen so far), broker_subscriptions (topics subscribed so far, in order) and rest_listening (whether the REST port accepts connections). Group missing_env is different: each row unsets the env variables in 'missing' and expects loading the bridge to throw an Error with expected_error before any I/O. A bug pinned on purpose carries known_bug (catalog id in tests/README.md). All message payloads are hand-written, nothing is computed by the code under test.",
+  "login": {"session": "91AC25D06A0C26BA", "username": "user", "password": "1234", "u": "EBA2095C", "p": "82016AC9BD9B087D6C393B19C756B255"},
+  "startup": [
+    {
+      "name": "login, then MQTT connect and two subscriptions, in this order; the REST port opens; nothing is published before the first poll",
+      "known_bug": "KB-4",
+      "note": "The startup emissions of status_listener happen before anyone listens (initial armed=null, every sensor=false), so the broker sees no message at all until the first poll.",
+      "start": {"expect": {"panel_requests": ["GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html"], "broker_connects": 1, "broker_subscriptions": ["paradox/command/arm", "paradox/command/disarm"], "rest_listening": true}}
+    },
+    {
+      "name": "no poll before 1000 ms, first poll at exactly 1000 ms",
+      "known_bug": "KB-4",
+      "note": "The first poll publishes OFF only because the assumed initial armed state is null, not false.",
+      "steps": [
+        {"advance_ms": 999, "expect": {"panel_requests": []}},
+        {"advance_ms": 1, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}}
+      ]
+    },
+    {
+      "name": "polls repeat once per second",
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}},
+        {"advance_ms": 1000, "expect": {"panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}},
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}}
+      ]
+    },
+    {
+      "name": "a panel with no enabled zone starts and still reports the armed state",
+      "panel": {"zones": []},
+      "steps": [
+        {"advance_ms": 1000, "panel_status": {"statuszone": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [2, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "ON", "retain": true}]}}
+      ]
+    },
+    {
+      "name": "a failing logout before login is tolerated",
+      "panel": {"faults": [{"path": "/logout.html", "kind": "reset", "times": 1}]},
+      "start": {"expect": {"panel_requests": ["GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html"], "broker_connects": 1, "rest_listening": true}}
+    },
+    {
+      "name": "index page failures are retried and startup still succeeds",
+      "panel": {"faults": [{"path": "/index.html", "kind": "http_500", "times": 3}]},
+      "start": {"expect": {"panel_requests": ["GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html", "GET /index.html", "GET /index.html", "GET /index.html"], "broker_connects": 1, "rest_listening": true}}
+    },
+    {
+      "name": "a retained command on the broker is executed as soon as the bridge subscribes",
+      "known_bug": "KB-16",
+      "note": "The broker replays retained messages on SUBSCRIBE; the bridge acts on any message of a command topic, whatever the payload.",
+      "broker": {"retained": {"paradox/command/arm": "ON"}},
+      "start": {"expect": {"panel_requests": ["GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html", "GET /statuslive.html?area=00&value=r"], "broker_connects": 1, "rest_listening": true}},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "ON", "retain": true}]}}
+      ]
+    }
+  ],
+  "keep_alive": [
+    {
+      "name": "keep-alive request every 3000 ms with a bare msgid parameter",
+      "known_bug": "KB-9",
+      "note": "The random cache-buster parameter is dropped by axios because its value is null.",
+      "steps": [
+        {"advance_ms": 2999, "expect": {"panel_requests": ["GET /statuslive.html", "GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"advance_ms": 1, "expect": {"panel_requests_any_order": ["GET /keep_alive.html?msgid=1", "GET /statuslive.html"]}},
+        {"advance_ms": 3000, "expect": {"panel_requests_any_order": ["GET /statuslive.html", "GET /statuslive.html", "GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}}
+      ]
+    },
+    {
+      "name": "steady state: 30 s of an unchanged panel are 30 polls, 10 keep-alives and a single message",
+      "steps": [
+        {"advance_ms": 30000, "expect": {"panel_request_counts": {"GET /statuslive.html": 30, "GET /keep_alive.html?msgid=1": 10}, "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}}
+      ]
+    },
+    {
+      "name": "a keep-alive answered with HTTP 500 is only logged",
+      "known_bug": "KB-12",
+      "note": "Unlike a status poll, a keep-alive failure never reaches the exit handler.",
+      "steps": [
+        {"panel_fault": {"path": "/keep_alive.html", "kind": "http_500", "times": 1}, "advance_ms": 3000, "expect": {"logged_error": true, "panel_requests_any_order": ["GET /statuslive.html", "GET /statuslive.html", "GET /statuslive.html", "GET /keep_alive.html?msgid=1"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}}
+      ]
+    },
+    {
+      "name": "a keep-alive with a reset connection is only logged",
+      "steps": [
+        {"panel_fault": {"path": "/keep_alive.html", "kind": "reset", "times": 1}, "advance_ms": 3000, "expect": {"logged_error": true, "panel_requests_any_order": ["GET /statuslive.html", "GET /statuslive.html", "GET /statuslive.html", "GET /keep_alive.html?msgid=1"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}}
+      ]
+    },
+    {
+      "name": "a keep-alive answered with the login page is not an error",
+      "known_bug": "KB-12",
+      "note": "The response body is never inspected, so an expired session goes unnoticed by the keep-alive.",
+      "steps": [
+        {"panel_fault": {"path": "/keep_alive.html", "kind": "login_page", "times": 1}, "advance_ms": 3000, "expect": {"logged_error": false, "panel_requests_any_order": ["GET /statuslive.html", "GET /statuslive.html", "GET /statuslive.html", "GET /keep_alive.html?msgid=1"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}}
+      ]
+    }
+  ],
+  "armed": [
+    {
+      "name": "disarmed panel: OFF at the first poll, not repeated",
+      "known_bug": "KB-4",
+      "note": "OFF is published only because the initial state is assumed to be null.",
+      "panel": {"useraccess": [1, 0]},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}}
+      ]
+    },
+    {
+      "name": "armed panel: ON at the first poll, not repeated",
+      "panel": {"useraccess": [2, 0]},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "ON", "retain": true}]}},
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}}
+      ]
+    },
+    {
+      "name": "arming code 7 counts as armed",
+      "panel": {"useraccess": [7, 0]},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "ON", "retain": true}]}},
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}}
+      ]
+    },
+    {
+      "name": "unknown code at startup publishes nothing, a later known code publishes",
+      "known_bug": "KB-4",
+      "panel": {"useraccess": [3, 0]},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}},
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [1, 0]}, "expect": {"mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}], "panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}}
+      ]
+    },
+    {
+      "name": "codes 0 3 4 5 6 8 9 10 17 22 are all unknown and never publish",
+      "known_bug": "KB-4",
+      "panel": {"useraccess": [0, 0]},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [3, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [4, 0]}, "expect": {"panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [5, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [6, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [8, 0]}, "expect": {"panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [9, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [10, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [17, 0]}, "expect": {"panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [22, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"]}}
+      ]
+    },
+    {
+      "name": "armed to disarmed",
+      "panel": {"useraccess": [2, 0]},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "ON", "retain": true}]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [1, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"advance_ms": 1000, "expect": {"panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}}
+      ]
+    },
+    {
+      "name": "disarmed to arming to armed to disarmed: arming and armed are one state",
+      "panel": {"useraccess": [1, 0]},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [7, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "ON", "retain": true}]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [2, 0]}, "expect": {"panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [7, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [1, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}}
+      ]
+    },
+    {
+      "name": "a transition through an unknown code publishes nothing, then republishes the same state",
+      "known_bug": "KB-4",
+      "note": "The retained message keeps the stale state while the code is unknown, and the return to the old state is published again.",
+      "panel": {"useraccess": [2, 0]},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "ON", "retain": true}]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [3, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [2, 0]}, "expect": {"mqtt_published": [{"topic": "paradox/status/armed", "payload": "ON", "retain": true}], "panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}}
+      ]
+    },
+    {
+      "name": "only area 1 matters: the second area never changes the published state",
+      "known_bug": "KB-18",
+      "note": "useraccess is parsed with parseInt on an array, so only its first element counts.",
+      "panel": {"useraccess": [1, 2]},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [1, 7]}, "expect": {"panel_requests": ["GET /statuslive.html"]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [2, 7]}, "expect": {"mqtt_published": [{"topic": "paradox/status/armed", "payload": "ON", "retain": true}], "panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [0, 2]}, "expect": {"panel_requests": ["GET /statuslive.html"]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [1, 2]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}}
+      ]
+    },
+    {
+      "name": "an empty useraccess table is an unknown state",
+      "panel": {"useraccess": []},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [2, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "ON", "retain": true}]}}
+      ]
+    }
+  ],
+  "sensors": [
+    {
+      "name": "closed sensors at startup publish nothing, whatever their code",
+      "known_bug": "KB-4",
+      "note": "The captured unarmed page has codes 5 and 6 on two zones; they start 'closed' like everything else.",
+      "panel": {"statuszone": [5, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "useraccess": [1, 0]},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}}
+      ]
+    },
+    {
+      "name": "a sensor opening publishes ON on its own topic and closing publishes OFF",
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/sensor/2", "payload": "ON", "retain": true}]}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/sensor/2", "payload": "OFF", "retain": true}]}}
+      ]
+    },
+    {
+      "name": "only code 1 is open, every other code is closed",
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/sensor/0", "payload": "ON", "retain": true}, {"topic": "paradox/sensor/1", "payload": "ON", "retain": true}, {"topic": "paradox/sensor/2", "payload": "ON", "retain": true}, {"topic": "paradox/sensor/3", "payload": "ON", "retain": true}, {"topic": "paradox/sensor/4", "payload": "ON", "retain": true}, {"topic": "paradox/sensor/5", "payload": "ON", "retain": true}]}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [0, 2, 3, 4, 5, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"mqtt_published": [{"topic": "paradox/sensor/0", "payload": "OFF", "retain": true}, {"topic": "paradox/sensor/1", "payload": "OFF", "retain": true}, {"topic": "paradox/sensor/2", "payload": "OFF", "retain": true}, {"topic": "paradox/sensor/3", "payload": "OFF", "retain": true}, {"topic": "paradox/sensor/4", "payload": "OFF", "retain": true}, {"topic": "paradox/sensor/5", "payload": "OFF", "retain": true}], "panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/sensor/0", "payload": "ON", "retain": true}, {"topic": "paradox/sensor/1", "payload": "ON", "retain": true}, {"topic": "paradox/sensor/2", "payload": "ON", "retain": true}, {"topic": "paradox/sensor/3", "payload": "ON", "retain": true}, {"topic": "paradox/sensor/4", "payload": "ON", "retain": true}, {"topic": "paradox/sensor/5", "payload": "ON", "retain": true}]}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [7, 8, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/sensor/0", "payload": "OFF", "retain": true}, {"topic": "paradox/sensor/1", "payload": "OFF", "retain": true}, {"topic": "paradox/sensor/2", "payload": "OFF", "retain": true}, {"topic": "paradox/sensor/3", "payload": "OFF", "retain": true}, {"topic": "paradox/sensor/4", "payload": "OFF", "retain": true}, {"topic": "paradox/sensor/5", "payload": "OFF", "retain": true}]}}
+      ]
+    },
+    {
+      "name": "one poll with several changes publishes the armed state first, then sensors by ascending index",
+      "panel": {"useraccess": [2, 0], "statuszone": [0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "ON", "retain": true}, {"topic": "paradox/sensor/1", "payload": "ON", "retain": true}, {"topic": "paradox/sensor/3", "payload": "ON", "retain": true}, {"topic": "paradox/sensor/4", "payload": "ON", "retain": true}]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [1, 0], "statuszone": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}, {"topic": "paradox/sensor/0", "payload": "ON", "retain": true}, {"topic": "paradox/sensor/1", "payload": "OFF", "retain": true}, {"topic": "paradox/sensor/3", "payload": "OFF", "retain": true}, {"topic": "paradox/sensor/4", "payload": "OFF", "retain": true}, {"topic": "paradox/sensor/5", "payload": "ON", "retain": true}]}}
+      ]
+    },
+    {
+      "name": "status entries beyond the enabled zones are never published",
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]}, "expect": {"panel_requests": ["GET /statuslive.html"]}}
+      ]
+    },
+    {
+      "name": "a sensor that opens and closes between two polls is never seen",
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"panel_status": {"statuszone": [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"]}}
+      ]
+    },
+    {
+      "name": "a status table shorter than the zone list reads missing entries as closed",
+      "panel": {"statuszone": [1, 1, 1]},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}, {"topic": "paradox/sensor/0", "payload": "ON", "retain": true}, {"topic": "paradox/sensor/1", "payload": "ON", "retain": true}, {"topic": "paradox/sensor/2", "payload": "ON", "retain": true}]}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [1, 1]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/sensor/2", "payload": "OFF", "retain": true}]}}
+      ]
+    },
+    {
+      "name": "a status table with a single entry is read as an empty array of that length, so nothing opens",
+      "known_bug": "KB-23",
+      "note": "The table text new Array(1) is evaluated as is, and a lone number is a length, not an element.",
+      "panel": {"statuszone": [1]},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [1, 1]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/sensor/0", "payload": "ON", "retain": true}, {"topic": "paradox/sensor/1", "payload": "ON", "retain": true}]}}
+      ]
+    },
+    {
+      "name": "a useraccess table with a single entry is an unknown state",
+      "known_bug": "KB-23",
+      "note": "new Array(2) is an empty array of length 2, not [2].",
+      "panel": {"useraccess": [2]},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [2, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "ON", "retain": true}]}}
+      ]
+    },
+    {
+      "name": "a disabled zone in front shifts every sensor onto the status entry of the position before it",
+      "known_bug": "KB-2",
+      "note": "Enabled zones are re-indexed after filtering: sensor/<position> reads statuszone[position], so the status of the disabled zone 0 is published as sensor/0 and the real zone 2 (Window) is never seen.",
+      "panel": {"zones": [[0, " "], [1, "Door"], [1, "Window"]]},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/sensor/0", "payload": "ON", "retain": true}]}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"mqtt_published": [{"topic": "paradox/sensor/0", "payload": "OFF", "retain": true}, {"topic": "paradox/sensor/1", "payload": "ON", "retain": true}], "panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/sensor/1", "payload": "OFF", "retain": true}]}}
+      ]
+    },
+    {
+      "name": "a disabled zone between enabled ones: the last enabled zone is read from the wrong entry",
+      "known_bug": "KB-2",
+      "panel": {"zones": [[1, "A"], [0, " "], [1, "B"]]},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"]}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"mqtt_published": [{"topic": "paradox/sensor/1", "payload": "ON", "retain": true}], "panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}}
+      ]
+    },
+    {
+      "name": "a zone flagged for area 2 or for both areas is not monitored, so sensors are numbered over the area 1 zones alone",
+      "known_bug": "KB-18",
+      "note": "The first number of a tbl_zone pair is an area bitmask (tests/README.md) and the bridge keeps only pairs equal to 1. Two of these four zones qualify, so only sensor/0 and sensor/1 exist, reading statuszone[0] and statuszone[1].",
+      "panel": {"zones": [[2, "Area two"], [1, "One"], [3, "Both"], [1, "Two"]]},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"]}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"mqtt_published": [{"topic": "paradox/sensor/1", "payload": "ON", "retain": true}], "panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}}
+      ]
+    },
+    {
+      "name": "with 32 enabled zones only the first 16 are ever published",
+      "known_bug": "KB-1",
+      "note": "util.iterateTuples stops halfway: 64 list items yield 16 tuples.",
+      "panel": {"zones": [[1, "Zone 1"], [1, "Zone 2"], [1, "Zone 3"], [1, "Zone 4"], [1, "Zone 5"], [1, "Zone 6"], [1, "Zone 7"], [1, "Zone 8"], [1, "Zone 9"], [1, "Zone 10"], [1, "Zone 11"], [1, "Zone 12"], [1, "Zone 13"], [1, "Zone 14"], [1, "Zone 15"], [1, "Zone 16"], [1, "Zone 17"], [1, "Zone 18"], [1, "Zone 19"], [1, "Zone 20"], [1, "Zone 21"], [1, "Zone 22"], [1, "Zone 23"], [1, "Zone 24"], [1, "Zone 25"], [1, "Zone 26"], [1, "Zone 27"], [1, "Zone 28"], [1, "Zone 29"], [1, "Zone 30"], [1, "Zone 31"], [1, "Zone 32"]]},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/sensor/0", "payload": "ON", "retain": true}, {"topic": "paradox/sensor/15", "payload": "ON", "retain": true}]}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]}, "expect": {"mqtt_published": [{"topic": "paradox/sensor/0", "payload": "OFF", "retain": true}, {"topic": "paradox/sensor/15", "payload": "OFF", "retain": true}], "panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}}
+      ]
+    },
+    {
+      "name": "with no enabled zone no sensor is ever published",
+      "panel": {"zones": []},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}, "expect": {"panel_requests": ["GET /statuslive.html"]}}
+      ]
+    }
+  ],
+  "mqtt_commands": [
+    {
+      "name": "arm command: panel is told to arm, the next poll publishes ON",
+      "panel": {"useraccess": [1, 0]},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"mqtt_command": "arm", "expect": {"panel_requests": ["GET /statuslive.html?area=00&value=r"]}},
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "ON", "retain": true}]}}
+      ]
+    },
+    {
+      "name": "disarm command: panel is told to disarm, the next poll publishes OFF",
+      "panel": {"useraccess": [2, 0]},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "ON", "retain": true}]}},
+        {"mqtt_command": "disarm", "expect": {"panel_requests": ["GET /statuslive.html?area=00&value=d"]}},
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}}
+      ]
+    },
+    {
+      "name": "the payload of an arm command is ignored",
+      "known_bug": "KB-16",
+      "note": "Any message on paradox/command/arm arms, even OFF, disarm or an empty payload.",
+      "steps": [
+        {"mqtt_command": {"topic": "paradox/command/arm", "payload": "OFF"}, "expect": {"panel_requests": ["GET /statuslive.html?area=00&value=r"]}},
+        {"mqtt_command": {"topic": "paradox/command/arm", "payload": ""}, "expect": {"panel_requests": ["GET /statuslive.html?area=00&value=r"]}},
+        {"mqtt_command": {"topic": "paradox/command/arm", "payload": "disarm"}, "expect": {"panel_requests": ["GET /statuslive.html?area=00&value=r"]}}
+      ]
+    },
+    {
+      "name": "the payload of a disarm command is ignored",
+      "known_bug": "KB-16",
+      "steps": [
+        {"mqtt_command": {"topic": "paradox/command/disarm", "payload": "ON"}, "expect": {"panel_requests": ["GET /statuslive.html?area=00&value=d"]}},
+        {"mqtt_command": {"topic": "paradox/command/disarm", "payload": ""}, "expect": {"panel_requests": ["GET /statuslive.html?area=00&value=d"]}},
+        {"mqtt_command": {"topic": "paradox/command/disarm", "payload": "arm"}, "expect": {"panel_requests": ["GET /statuslive.html?area=00&value=d"]}}
+      ]
+    },
+    {
+      "name": "commands go out in the order received, always for area 00",
+      "known_bug": "KB-18",
+      "steps": [
+        {"mqtt_command": "arm", "expect": {"panel_requests": ["GET /statuslive.html?area=00&value=r"]}},
+        {"mqtt_command": "disarm", "expect": {"panel_requests": ["GET /statuslive.html?area=00&value=d"]}},
+        {"mqtt_command": "arm", "expect": {"panel_requests": ["GET /statuslive.html?area=00&value=r"]}}
+      ]
+    },
+    {
+      "name": "messages on any other topic are ignored, exact topic match only",
+      "note": "Delivered to the bridge's connection even though it never subscribed to them, as a misbehaving broker would.",
+      "steps": [
+        {"mqtt_message": {"topic": "paradox/command/ARM", "payload": ""}, "expect": {"panel_requests": []}},
+        {"mqtt_message": {"topic": "paradox/command", "payload": ""}, "expect": {"panel_requests": []}},
+        {"mqtt_message": {"topic": "paradox/command/arm/x", "payload": ""}, "expect": {"panel_requests": []}},
+        {"mqtt_message": {"topic": "paradox/status/armed", "payload": ""}, "expect": {"panel_requests": []}},
+        {"mqtt_message": {"topic": "paradox/command/disarm/", "payload": ""}, "expect": {"panel_requests": []}},
+        {"mqtt_message": {"topic": "arm", "payload": ""}, "expect": {"panel_requests": []}},
+        {"mqtt_command": "arm", "expect": {"panel_requests": ["GET /statuslive.html?area=00&value=r"]}}
+      ]
+    },
+    {
+      "name": "a command failing with HTTP 500 is logged, not retried, and does not stop the bridge",
+      "steps": [
+        {"panel_fault": {"path": "/statuslive.html", "kind": "http_500", "times": 1}, "mqtt_command": "arm", "expect": {"logged_error": true, "panel_requests": ["GET /statuslive.html?area=00&value=r"]}},
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}}
+      ]
+    },
+    {
+      "name": "a command with a reset connection is logged and does not stop the bridge",
+      "steps": [
+        {"panel_fault": {"path": "/statuslive.html", "kind": "reset", "times": 1}, "mqtt_command": "disarm", "expect": {"logged_error": true, "panel_requests": ["GET /statuslive.html?area=00&value=d"]}},
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}}
+      ]
+    },
+    {
+      "name": "a command answered with the login page after session expiry counts as success",
+      "known_bug": "KB-14",
+      "note": "The response is ignored, so the lost session goes unnoticed and nothing is armed.",
+      "steps": [
+        {"panel_expire_session": true, "mqtt_command": "arm", "expect": {"logged_error": false, "panel_requests": ["GET /statuslive.html?area=00&value=r"]}}
+      ]
+    }
+  ],
+  "rest": [
+    {
+      "name": "GET /status returns the raw panel tables as JSON",
+      "panel": {"statuszone": [5, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "useraccess": [1, 0]},
+      "steps": [
+        {"rest": {"method": "GET", "path": "/status"}, "expect": {"panel_requests": ["GET /statuslive.html"], "rest_response": {"status": 200, "body": {"statuszone": [5, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "useraccess": [1, 0], "alarms": [0]}}}}
+      ]
+    },
+    {
+      "name": "GET /status on an armed panel",
+      "panel": {"statuszone": [5, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "useraccess": [7, 0]},
+      "steps": [
+        {"rest": {"method": "GET", "path": "/status"}, "expect": {"panel_requests": ["GET /statuslive.html"], "rest_response": {"status": 200, "body": {"statuszone": [5, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "useraccess": [7, 0], "alarms": [0]}}}}
+      ]
+    },
+    {
+      "name": "GET /status always reports alarms [0], the alarm table is never parsed",
+      "known_bug": "KB-15",
+      "panel": {"statuszone": [5, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "useraccess": [2, 0]},
+      "steps": [
+        {"rest": {"method": "GET", "path": "/status"}, "panel_status": {"alarms": ["1", "2", "3"]}, "expect": {"panel_requests": ["GET /statuslive.html"], "rest_response": {"status": 200, "body": {"statuszone": [5, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "useraccess": [2, 0], "alarms": [0]}}}}
+      ]
+    },
+    {
+      "name": "POST /arm arms the panel and answers 200 OK",
+      "steps": [
+        {"rest": {"method": "POST", "path": "/arm"}, "expect": {"panel_requests": ["GET /statuslive.html?area=00&value=r"], "rest_response": {"status": 200, "body": "OK"}}},
+        {"rest": {"method": "GET", "path": "/status"}, "expect": {"panel_requests": ["GET /statuslive.html"], "rest_response": {"status": 200, "body": {"statuszone": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "useraccess": [2, 0], "alarms": [0]}}}}
+      ]
+    },
+    {
+      "name": "POST /disarm disarms the panel and answers 200 OK",
+      "panel": {"useraccess": [2, 0]},
+      "steps": [
+        {"rest": {"method": "POST", "path": "/disarm"}, "expect": {"panel_requests": ["GET /statuslive.html?area=00&value=d"], "rest_response": {"status": 200, "body": "OK"}}},
+        {"rest": {"method": "GET", "path": "/status"}, "expect": {"panel_requests": ["GET /statuslive.html"], "rest_response": {"status": 200, "body": {"statuszone": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "useraccess": [1, 0], "alarms": [0]}}}}
+      ]
+    },
+    {
+      "name": "arming over REST shows up as an armed message at the next poll",
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"rest": {"method": "POST", "path": "/arm"}, "expect": {"panel_requests": ["GET /statuslive.html?area=00&value=r"], "rest_response": {"status": 200, "body": "OK"}}},
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "ON", "retain": true}]}}
+      ]
+    },
+    {
+      "name": "a panel answering HTTP 500 gives 500 with the error message, and the bridge keeps running",
+      "note": "The msg text is axios's own message; a port only needs a 500 with a msg field.",
+      "steps": [
+        {"rest": {"method": "GET", "path": "/status"}, "panel_fault": {"path": "/statuslive.html", "kind": "http_500", "times": 1}, "expect": {"logged_error": true, "panel_requests": ["GET /statuslive.html"], "rest_response": {"status": 500, "body": {"msg": "Request failed with status code 500"}}}},
+        {"rest": {"method": "POST", "path": "/arm"}, "panel_fault": {"path": "/statuslive.html", "kind": "http_500", "times": 1}, "expect": {"logged_error": true, "panel_requests": ["GET /statuslive.html?area=00&value=r"], "rest_response": {"status": 500, "body": {"msg": "Request failed with status code 500"}}}},
+        {"rest": {"method": "POST", "path": "/disarm"}, "panel_fault": {"path": "/statuslive.html", "kind": "http_500", "times": 1}, "expect": {"logged_error": true, "panel_requests": ["GET /statuslive.html?area=00&value=d"], "rest_response": {"status": 500, "body": {"msg": "Request failed with status code 500"}}}},
+        {"rest": {"method": "GET", "path": "/status"}, "expect": {"panel_requests": ["GET /statuslive.html"], "rest_response": {"status": 200, "body": {"statuszone": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "useraccess": [1, 0], "alarms": [0]}}}}
+      ]
+    },
+    {
+      "name": "a panel resetting the connection gives 500 with the transport error message",
+      "note": "'socket hang up' is Node's text for a reset before any response.",
+      "steps": [
+        {"rest": {"method": "GET", "path": "/status"}, "panel_fault": {"path": "/statuslive.html", "kind": "reset", "times": 1}, "expect": {"logged_error": true, "panel_requests": ["GET /statuslive.html"], "rest_response": {"status": 500, "body": {"msg": "socket hang up"}}}},
+        {"rest": {"method": "POST", "path": "/arm"}, "panel_fault": {"path": "/statuslive.html", "kind": "reset", "times": 1}, "expect": {"logged_error": true, "panel_requests": ["GET /statuslive.html?area=00&value=r"], "rest_response": {"status": 500, "body": {"msg": "socket hang up"}}}}
+      ]
+    },
+    {
+      "name": "GET /status after session expiry fails to parse the login page and gives 500",
+      "known_bug": "KB-12",
+      "steps": [
+        {"rest": {"method": "GET", "path": "/status"}, "panel_expire_session": true, "expect": {"logged_error": true, "panel_requests": ["GET /statuslive.html"], "rest_response": {"status": 500, "body": {"msg": "Regex didn't match the value"}}}}
+      ]
+    },
+    {
+      "name": "POST /arm and /disarm after session expiry still answer 200 OK",
+      "known_bug": "KB-14",
+      "steps": [
+        {"rest": {"method": "POST", "path": "/arm"}, "panel_expire_session": true, "expect": {"logged_error": false, "panel_requests": ["GET /statuslive.html?area=00&value=r"], "rest_response": {"status": 200, "body": "OK"}}},
+        {"rest": {"method": "POST", "path": "/disarm"}, "expect": {"logged_error": false, "panel_requests": ["GET /statuslive.html?area=00&value=d"], "rest_response": {"status": 200, "body": "OK"}}}
+      ]
+    },
+    {
+      "name": "unauthenticated POST /disarm disarms the alarm",
+      "known_bug": "KB-19",
+      "note": "No credential of any kind is part of the request; the bridge also listens on all interfaces (checked in app.test.js).",
+      "panel": {"useraccess": [2, 0]},
+      "steps": [
+        {"rest": {"method": "POST", "path": "/disarm"}, "expect": {"panel_requests": ["GET /statuslive.html?area=00&value=d"], "rest_response": {"status": 200, "body": "OK"}}},
+        {"rest": {"method": "GET", "path": "/status"}, "expect": {"panel_requests": ["GET /statuslive.html"], "rest_response": {"status": 200, "body": {"statuszone": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "useraccess": [1, 0], "alarms": [0]}}}}
+      ]
+    },
+    {
+      "name": "only GET /status, POST /arm and POST /disarm exist; everything else is 404 without touching the panel",
+      "steps": [
+        {"rest": {"method": "GET", "path": "/arm"}, "expect": {"panel_requests": [], "rest_response": {"status": 404}}},
+        {"rest": {"method": "GET", "path": "/disarm"}, "expect": {"panel_requests": [], "rest_response": {"status": 404}}},
+        {"rest": {"method": "PUT", "path": "/arm"}, "expect": {"panel_requests": [], "rest_response": {"status": 404}}},
+        {"rest": {"method": "DELETE", "path": "/disarm"}, "expect": {"panel_requests": [], "rest_response": {"status": 404}}},
+        {"rest": {"method": "POST", "path": "/status"}, "expect": {"panel_requests": [], "rest_response": {"status": 404}}},
+        {"rest": {"method": "GET", "path": "/"}, "expect": {"panel_requests": [], "rest_response": {"status": 404}}},
+        {"rest": {"method": "GET", "path": "/foo"}, "expect": {"panel_requests": [], "rest_response": {"status": 404}}},
+        {"rest": {"method": "POST", "path": "/arm/x"}, "expect": {"panel_requests": [], "rest_response": {"status": 404}}}
+      ]
+    },
+    {
+      "name": "express default routing: trailing slash, upper case, query string and HEAD reach the same handlers",
+      "note": "Incidental to Express defaults, not a requirement; a port may be stricter.",
+      "panel": {"useraccess": [2, 0]},
+      "steps": [
+        {"rest": {"method": "GET", "path": "/status/"}, "expect": {"panel_requests": ["GET /statuslive.html"], "rest_response": {"status": 200, "body": {"statuszone": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "useraccess": [2, 0], "alarms": [0]}}}},
+        {"rest": {"method": "GET", "path": "/STATUS"}, "expect": {"panel_requests": ["GET /statuslive.html"], "rest_response": {"status": 200, "body": {"statuszone": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "useraccess": [2, 0], "alarms": [0]}}}},
+        {"rest": {"method": "GET", "path": "/status?x=1"}, "expect": {"panel_requests": ["GET /statuslive.html"], "rest_response": {"status": 200, "body": {"statuszone": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "useraccess": [2, 0], "alarms": [0]}}}},
+        {"rest": {"method": "HEAD", "path": "/status"}, "expect": {"panel_requests": ["GET /statuslive.html"], "rest_response": {"status": 200}}},
+        {"rest": {"method": "POST", "path": "/disarm/"}, "expect": {"panel_requests": ["GET /statuslive.html?area=00&value=d"], "rest_response": {"status": 200, "body": "OK"}}}
+      ]
+    }
+  ],
+  "failures": [
+    {
+      "name": "a status poll answered with HTTP 500 exits with code 1",
+      "known_bug": "KB-12",
+      "steps": [
+        {"panel_fault": {"path": "/statuslive.html", "kind": "http_500", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "process_exit": [1]}}
+      ]
+    },
+    {
+      "name": "a status poll with a reset connection exits with code 1",
+      "known_bug": "KB-12",
+      "steps": [
+        {"panel_fault": {"path": "/statuslive.html", "kind": "reset", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "process_exit": [1]}}
+      ]
+    },
+    {
+      "name": "a status poll answered with a page without the status tables exits with code 1",
+      "known_bug": "KB-12",
+      "steps": [
+        {"panel_fault": {"path": "/statuslive.html", "kind": "garbage", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "process_exit": [1]}}
+      ]
+    },
+    {
+      "name": "a panel that went away exits with code 1 at the next poll",
+      "known_bug": "KB-12",
+      "steps": [
+        {"panel_down": true, "advance_ms": 1000, "expect": {"process_exit": [1]}}
+      ]
+    },
+    {
+      "name": "an expired panel session exits with code 1 at the next poll",
+      "known_bug": "KB-12",
+      "note": "The panel answers the login page; there is no re-login.",
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"panel_expire_session": true, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "process_exit": [1]}}
+      ]
+    },
+    {
+      "name": "the first failed poll is fatal even after many good ones",
+      "known_bug": "KB-12",
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}},
+        {"panel_fault": {"path": "/statuslive.html", "kind": "http_500", "times": 1}, "advance_ms": 1000, "expect": {"process_exit": [1], "panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}}
+      ]
+    },
+    {
+      "name": "a poll that never gets an answer never times out and the next poll overlaps it",
+      "known_bug": "KB-13",
+      "note": "No HTTP timeout and no in-flight guard: the second poll goes out while the first is still pending.",
+      "steps": [
+        {"panel_fault": {"path": "/statuslive.html", "kind": "hang", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}},
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"advance_ms": 1000, "expect": {"panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}}
+      ]
+    },
+    {
+      "name": "losing the MQTT connection exits with code 1",
+      "steps": [
+        {"broker_drop_clients": true, "expect": {"process_exit": [1]}}
+      ]
+    },
+    {
+      "name": "wrong panel credentials exit with code 1 before MQTT or the REST server start",
+      "panel": {"accept_login": false},
+      "start": {"ready": false, "expect": {"panel_requests": ["GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255"], "process_exit": [1], "broker_connects": 0, "rest_listening": false}},
+      "steps": [
+        {"advance_ms": 10000, "expect": {"broker_connects": 0, "rest_listening": false}}
+      ]
+    },
+    {
+      "name": "an unreachable panel exits with code 1 before MQTT or the REST server start",
+      "panel": {"down": true},
+      "start": {"ready": false, "expect": {"process_exit": [1], "broker_connects": 0, "rest_listening": false}}
+    },
+    {
+      "name": "a login page request failing with HTTP 500 exits with code 1",
+      "panel": {"faults": [{"path": "/login_page.html", "kind": "http_500"}]},
+      "start": {"ready": false, "expect": {"panel_requests": ["GET /logout.html", "GET /login_page.html"], "process_exit": [1], "broker_connects": 0, "rest_listening": false}}
+    },
+    {
+      "name": "a login page without a session value exits with code 1",
+      "panel": {"faults": [{"path": "/login_page.html", "kind": "garbage"}]},
+      "start": {"ready": false, "expect": {"panel_requests": ["GET /logout.html", "GET /login_page.html"], "process_exit": [1], "broker_connects": 0, "rest_listening": false}}
+    },
+    {
+      "name": "a successful login answered with a pretty-printed default page cannot be recognised and exits with code 1",
+      "known_bug": "KB-11",
+      "note": "The title regex does not span lines, so an indented multi-line head fails to match.",
+      "panel": {"faults": [{"path": "/default.html", "kind": "page", "page": {"file": "data/pretty_default_page.html"}}]},
+      "start": {"ready": false, "expect": {"panel_requests": ["GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255"], "process_exit": [1], "broker_connects": 0, "rest_listening": false}}
+    },
+    {
+      "name": "a default page with another title means login failed and exits with code 1",
+      "panel": {"faults": [{"path": "/default.html", "kind": "wrong_title"}]},
+      "start": {"ready": false, "expect": {"panel_requests": ["GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255"], "process_exit": [1], "broker_connects": 0, "rest_listening": false}}
+    },
+    {
+      "name": "a permanently failing index page is requested 11 times back to back, then exit code 1",
+      "known_bug": "KB-5",
+      "note": "The retry helper ignores its wait time.",
+      "panel": {"faults": [{"path": "/index.html", "kind": "http_500"}]},
+      "start": {"ready": false, "expect": {"panel_requests": ["GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html", "GET /index.html", "GET /index.html", "GET /index.html", "GET /index.html", "GET /index.html", "GET /index.html", "GET /index.html", "GET /index.html", "GET /index.html", "GET /index.html"], "process_exit": [1], "broker_connects": 0, "rest_listening": false}}
+    },
+    {
+      "name": "a zone name with a hyphen makes the whole bridge fail to start",
+      "known_bug": "KB-10",
+      "panel": {"zones": [[1, "Hall-way"]]},
+      "start": {"ready": false, "expect": {"panel_requests": ["GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html"], "process_exit": [1], "broker_connects": 0, "rest_listening": false}}
+    },
+    {
+      "name": "an unreachable broker is only noticed by the 5000 ms connect timeout, which exits with code 1",
+      "known_bug": "KB-17",
+      "note": "A refused connection raises no error event on the MQTT client; it just keeps retrying.",
+      "broker": {"down": true},
+      "start": {"ready": false, "expect": {"panel_requests": ["GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html"], "rest_listening": false}},
+      "steps": [
+        {"advance_ms": 4999, "expect": {"rest_listening": false}},
+        {"advance_ms": 1, "expect": {"process_exit": [1], "rest_listening": false}}
+      ]
+    },
+    {
+      "name": "a broker rejecting the credentials exits with code 1 before the REST server and the pollers start",
+      "broker": {"accept_credentials": false},
+      "start": {"ready": false, "expect": {"panel_requests": ["GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html"], "broker_connects": 1, "process_exit": [1], "rest_listening": false}},
+      "steps": [
+        {"advance_ms": 10000, "expect": {"broker_connects": 1, "rest_listening": false}}
+      ]
+    },
+    {
+      "name": "a broker that never answers CONNECT exits with code 1 after exactly 5000 ms, then the client keeps reconnecting",
+      "known_bug": "KB-17",
+      "note": "The timeout rejects but never ends the MQTT client, so it retries in the background (the second CONNECT arrives with the client's own 30 s connect timeout).",
+      "broker": {"silent": true},
+      "start": {"ready": false, "expect": {"panel_requests": ["GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html"], "broker_connects": 1, "rest_listening": false}},
+      "steps": [
+        {"advance_ms": 4999, "expect": {"broker_connects": 1, "rest_listening": false}},
+        {"advance_ms": 1, "expect": {"process_exit": [1], "rest_listening": false}},
+        {"advance_ms": 30000, "expect": {}},
+        {"advance_ms": 5000, "expect": {"broker_connects": 2}}
+      ]
+    }
+  ],
+  "shutdown": [
+    {
+      "name": "SIGTERM exits with 143 without logging out of the panel, then nothing runs any more",
+      "known_bug": "KB-3",
+      "note": "exitHandler returns the logout function without calling it: no /logout.html after the one before login. The server is closed, both timers are stopped, and later status changes are not published.",
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"signal": "SIGTERM", "panel_status": {"useraccess": [2, 0], "statuszone": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"process_exit": [143], "rest_listening": false}},
+        {"advance_ms": 10000, "expect": {"rest_listening": false}}
+      ]
+    },
+    {
+      "name": "SIGINT exits with 130",
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"signal": "SIGINT", "panel_status": {"useraccess": [2, 0], "statuszone": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"process_exit": [130], "rest_listening": false}},
+        {"advance_ms": 10000, "expect": {"rest_listening": false}}
+      ]
+    },
+    {
+      "name": "SIGHUP exits with 129",
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF", "retain": true}]}},
+        {"signal": "SIGHUP", "panel_status": {"useraccess": [2, 0], "statuszone": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"process_exit": [129], "rest_listening": false}},
+        {"advance_ms": 10000, "expect": {"rest_listening": false}}
+      ]
+    },
+    {
+      "name": "a signal right after startup, before the first poll, exits cleanly",
+      "steps": [
+        {"signal": "SIGTERM", "expect": {"process_exit": [143], "rest_listening": false}},
+        {"advance_ms": 10000, "expect": {"rest_listening": false}}
+      ]
+    },
+    {
+      "name": "a repeated or second signal runs the shutdown again and exits with its own code",
+      "steps": [
+        {"signal": "SIGTERM", "expect": {"process_exit": [143], "rest_listening": false}},
+        {"signal": "SIGTERM", "expect": {"process_exit": [143], "rest_listening": false}},
+        {"signal": "SIGINT", "expect": {"process_exit": [130], "rest_listening": false}}
+      ]
+    }
+  ],
+  "missing_env": [
+    {
+      "name": "HOSTNAME unset",
+      "known_bug": "KB-20",
+      "missing": ["HOSTNAME"],
+      "expected_error": "Missing enviromnent variable: HOSTNAME"
+    },
+    {
+      "name": "USERNAME unset",
+      "known_bug": "KB-20",
+      "missing": ["USERNAME"],
+      "expected_error": "Missing enviromnent variable: USERNAME"
+    },
+    {
+      "name": "PASSWORD unset",
+      "known_bug": "KB-20",
+      "missing": ["PASSWORD"],
+      "expected_error": "Missing enviromnent variable: PASSWORD"
+    },
+    {
+      "name": "PORT unset",
+      "known_bug": "KB-20",
+      "missing": ["PORT"],
+      "expected_error": "Missing enviromnent variable: PORT"
+    },
+    {
+      "name": "MQTT_HOSTNAME unset",
+      "known_bug": "KB-20",
+      "missing": ["MQTT_HOSTNAME"],
+      "expected_error": "Missing enviromnent variable: MQTT_HOSTNAME"
+    },
+    {
+      "name": "MQTT_PORT unset",
+      "known_bug": "KB-20",
+      "missing": ["MQTT_PORT"],
+      "expected_error": "Missing enviromnent variable: MQTT_PORT"
+    },
+    {
+      "name": "MQTT_USERNAME unset",
+      "known_bug": "KB-20",
+      "missing": ["MQTT_USERNAME"],
+      "expected_error": "Missing enviromnent variable: MQTT_USERNAME"
+    },
+    {
+      "name": "MQTT_PASSWORD unset",
+      "known_bug": "KB-20",
+      "missing": ["MQTT_PASSWORD"],
+      "expected_error": "Missing enviromnent variable: MQTT_PASSWORD"
+    },
+    {
+      "name": "USERNAME and HOSTNAME unset: HOSTNAME is reported first",
+      "known_bug": "KB-20",
+      "missing": ["USERNAME", "HOSTNAME"],
+      "expected_error": "Missing enviromnent variable: HOSTNAME"
+    },
+    {
+      "name": "PASSWORD and USERNAME unset: USERNAME is reported first",
+      "known_bug": "KB-20",
+      "missing": ["PASSWORD", "USERNAME"],
+      "expected_error": "Missing enviromnent variable: USERNAME"
+    },
+    {
+      "name": "PORT and PASSWORD unset: PASSWORD is reported first",
+      "known_bug": "KB-20",
+      "missing": ["PORT", "PASSWORD"],
+      "expected_error": "Missing enviromnent variable: PASSWORD"
+    },
+    {
+      "name": "MQTT_HOSTNAME and PORT unset: PORT is reported first",
+      "known_bug": "KB-20",
+      "missing": ["MQTT_HOSTNAME", "PORT"],
+      "expected_error": "Missing enviromnent variable: PORT"
+    },
+    {
+      "name": "MQTT_PORT and MQTT_HOSTNAME unset: MQTT_HOSTNAME is reported first",
+      "known_bug": "KB-20",
+      "missing": ["MQTT_PORT", "MQTT_HOSTNAME"],
+      "expected_error": "Missing enviromnent variable: MQTT_HOSTNAME"
+    },
+    {
+      "name": "MQTT_USERNAME and MQTT_PORT unset: MQTT_PORT is reported first",
+      "known_bug": "KB-20",
+      "missing": ["MQTT_USERNAME", "MQTT_PORT"],
+      "expected_error": "Missing enviromnent variable: MQTT_PORT"
+    },
+    {
+      "name": "MQTT_PASSWORD and MQTT_USERNAME unset: MQTT_USERNAME is reported first",
+      "known_bug": "KB-20",
+      "missing": ["MQTT_PASSWORD", "MQTT_USERNAME"],
+      "expected_error": "Missing enviromnent variable: MQTT_USERNAME"
+    }
+  ]
+}

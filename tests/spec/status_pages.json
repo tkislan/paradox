@@ -1,0 +1,451 @@
+{
+  "_comment": "Pages and responses the Paradox panel gives to the bridge, and what src/api/status.js and src/api/alarm.js make of them. \"page\" / \"response.body\" is an inline string or {\"file\": \"<path relative to tests/>\"}. Result arrays: {\"empty_slots\": n} stands for a JavaScript new Array(n), n unset slots (a port may use a list of None). \"error\" is the exact message of the failure; messages other than the parse error come from the JavaScript HTTP client (axios 0.18) and only the fact of failing is portable. \"known_bug\" refers to the catalog in README.md;",
+  "get_status": [
+    {
+      "name": "armed panel capture",
+      "page": { "file": "data/armed.html" },
+      "expected": {
+        "statuszone": [5, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "useraccess": [7, 0],
+        "alarms": [0]
+      },
+      "note": "The capture also carries tbl_alarmes = new Array() and three tbl_troubles entries; neither reaches the result."
+    },
+    {
+      "name": "unarmed panel capture",
+      "page": { "file": "data/unarmed.html" },
+      "expected": {
+        "statuszone": [5, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "useraccess": [1, 0],
+        "alarms": [0]
+      }
+    },
+    {
+      "name": "empty tables give empty lists",
+      "page": "tbl_statuszone = new Array();var stayd=\"0\";tbl_useraccess = new Array();",
+      "expected": { "statuszone": [], "useraccess": [], "alarms": [0] }
+    },
+    {
+      "name": "values of two or more digits are kept whole",
+      "page": "tbl_statuszone = new Array(10,25,3,255);var stayd=\"0\";tbl_useraccess = new Array(12,0);",
+      "expected": { "statuszone": [10, 25, 3, 255], "useraccess": [12, 0], "alarms": [0] }
+    },
+    {
+      "name": "32 zones are all returned",
+      "page": "tbl_statuszone = new Array(0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9,0,1);var stayd=\"0\";tbl_useraccess = new Array(2,0);",
+      "expected": {
+        "statuszone": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1],
+        "useraccess": [2, 0],
+        "alarms": [0]
+      }
+    },
+    {
+      "name": "more than 32 values are not capped",
+      "page": "tbl_statuszone = new Array(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,3,4,5,6,7,8);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
+      "expected": {
+        "statuszone": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8],
+        "useraccess": [1, 0],
+        "alarms": [0]
+      }
+    },
+    {
+      "name": "trailing comma is accepted",
+      "page": "tbl_statuszone = new Array(1,2,);var stayd=\"0\";tbl_useraccess = new Array(1,0,);",
+      "expected": { "statuszone": [1, 2], "useraccess": [1, 0], "alarms": [0] }
+    },
+    {
+      "name": "a single-value zone table becomes that many empty slots",
+      "page": "tbl_statuszone = new Array(7);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
+      "expected": {
+        "statuszone": { "empty_slots": 7 },
+        "useraccess": [1, 0],
+        "alarms": [0]
+      },
+      "known_bug": "KB-23",
+      "note": "The value is eval-ed as new Array(7), the JavaScript length constructor, not as a one-element list."
+    },
+    {
+      "name": "a single-value useraccess table becomes that many empty slots",
+      "page": "tbl_statuszone = new Array(0,0);var stayd=\"0\";tbl_useraccess = new Array(2);",
+      "expected": {
+        "statuszone": [0, 0],
+        "useraccess": { "empty_slots": 2 },
+        "alarms": [0]
+      },
+      "known_bug": "KB-23",
+      "note": "A panel with a one-entry useraccess table would therefore read as \"armed state unknown\"."
+    },
+    {
+      "name": "a single zero value becomes an empty list",
+      "page": "tbl_statuszone = new Array(0);var stayd=\"0\";tbl_useraccess = new Array(0);",
+      "expected": { "statuszone": [], "useraccess": [], "alarms": [0] },
+      "known_bug": "KB-23"
+    },
+    {
+      "name": "a single value of 2^32 or more fails with the engine error instead of the regex error",
+      "page": "tbl_statuszone = new Array(4294967296);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
+      "expected": { "error": "Invalid array length" },
+      "known_bug": "KB-23"
+    },
+    {
+      "name": "values with a leading zero are read as octal",
+      "page": "tbl_statuszone = new Array(010,011);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
+      "expected": { "statuszone": [8, 9], "useraccess": [1, 0], "alarms": [0] },
+      "known_bug": "KB-39",
+      "note": "The value is eval-ed as JavaScript source, where 010 is octal 8; a port that parses decimal integers reads 10 and 11. The panel is not known to pad numbers with zeros."
+    },
+    {
+      "name": "tbl_alarmes entries are ignored and alarms is always [0]",
+      "page": "tbl_statuszone = new Array(1,0);var stayd=\"0\";tbl_useraccess = new Array(2,0);tbl_alarmes = new Array(\"3\",\"4\");tbl_troubles = new Array(\"16\",\"19\");",
+      "expected": { "statuszone": [1, 0], "useraccess": [2, 0], "alarms": [0] },
+      "known_bug": "KB-15"
+    },
+    {
+      "name": "tables are found anywhere in the page",
+      "page": "<html><script>var a=1;\ntbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);\nvar b=2;</script></html>",
+      "expected": { "statuszone": [1, 2], "useraccess": [1, 0], "alarms": [0] }
+    },
+    {
+      "name": "tables may come in the opposite order",
+      "page": "tbl_useraccess = new Array(1,0);var stayd=\"0\";tbl_statuszone = new Array(3,4);",
+      "expected": { "statuszone": [3, 4], "useraccess": [1, 0], "alarms": [0] }
+    },
+    {
+      "name": "several spaces around = are accepted",
+      "page": "tbl_statuszone   =   new Array(1,2);tbl_useraccess  =  new Array(1,0);",
+      "expected": { "statuszone": [1, 2], "useraccess": [1, 0], "alarms": [0] }
+    },
+    {
+      "name": "CRLF line endings between the tables are accepted",
+      "page": "tbl_statuszone = new Array(1,2);\r\ntbl_useraccess = new Array(1,0);\r\n",
+      "expected": { "statuszone": [1, 2], "useraccess": [1, 0], "alarms": [0] }
+    },
+    {
+      "name": "table name preceded by other characters still matches",
+      "page": "xtbl_statuszone = new Array(1,2);xtbl_useraccess = new Array(1,0);",
+      "expected": { "statuszone": [1, 2], "useraccess": [1, 0], "alarms": [0] }
+    },
+    {
+      "name": "first table wins when it appears twice",
+      "page": "tbl_statuszone = new Array(1,1);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_statuszone = new Array(2,2);var stayd=\"0\";tbl_useraccess = new Array(2,0);",
+      "expected": { "statuszone": [1, 1], "useraccess": [1, 0], "alarms": [0] }
+    },
+    {
+      "name": "a malformed first table is skipped in favour of a later valid one",
+      "page": "tbl_statuszone = new Array(-1,1);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_statuszone = new Array(2,2);var stayd=\"0\";tbl_useraccess = new Array(2,0);",
+      "expected": { "statuszone": [2, 2], "useraccess": [1, 0], "alarms": [0] }
+    },
+    {
+      "name": "a space after a comma is rejected in tbl_statuszone",
+      "page": "tbl_statuszone = new Array(1, 2);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a space after a comma is rejected in tbl_useraccess",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1, 2);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a line break inside the array is rejected in tbl_statuszone",
+      "page": "tbl_statuszone = new Array(1,\n2);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a line break inside the array is rejected in tbl_useraccess",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,\n2);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a leading comma is rejected in tbl_statuszone",
+      "page": "tbl_statuszone = new Array(,1);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a leading comma is rejected in tbl_useraccess",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(,1);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a doubled comma is rejected in tbl_statuszone",
+      "page": "tbl_statuszone = new Array(1,,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a doubled comma is rejected in tbl_useraccess",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,,2);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a negative value is rejected in tbl_statuszone",
+      "page": "tbl_statuszone = new Array(-1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a negative value is rejected in tbl_useraccess",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(-1,2);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a decimal value is rejected in tbl_statuszone",
+      "page": "tbl_statuszone = new Array(1.5,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a decimal value is rejected in tbl_useraccess",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1.5,2);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a quoted value is rejected in tbl_statuszone",
+      "page": "tbl_statuszone = new Array(\"1\",2);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a quoted value is rejected in tbl_useraccess",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(\"1\",2);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a letter among the values is rejected in tbl_statuszone",
+      "page": "tbl_statuszone = new Array(1,a);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a letter among the values is rejected in tbl_useraccess",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,a);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "an array literal instead of new Array is rejected in tbl_statuszone",
+      "page": "tbl_statuszone = [1,2];var stayd=\"0\";tbl_useraccess = new Array(1,0);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "an array literal instead of new Array is rejected in tbl_useraccess",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = [1,2];",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "Array without new is rejected in tbl_statuszone",
+      "page": "tbl_statuszone = Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "Array without new is rejected in tbl_useraccess",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = Array(1,2);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a missing closing parenthesis is rejected in tbl_statuszone",
+      "page": "tbl_statuszone = new Array(1,2;var stayd=\"0\";tbl_useraccess = new Array(1,0);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a missing closing parenthesis is rejected in tbl_useraccess",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,2;",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "no spaces around = is rejected in tbl_statuszone",
+      "page": "tbl_statuszone=new Array(1,2);tbl_useraccess = new Array(1,0);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "no space before = is rejected in tbl_statuszone",
+      "page": "tbl_statuszone= new Array(1,2);tbl_useraccess = new Array(1,0);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "no space after = is rejected in tbl_statuszone",
+      "page": "tbl_statuszone =new Array(1,2);tbl_useraccess = new Array(1,0);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a tab around = is rejected in tbl_statuszone",
+      "page": "tbl_statuszone\t=\tnew Array(1,2);tbl_useraccess = new Array(1,0);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "no spaces around = is rejected in tbl_useraccess",
+      "page": "tbl_statuszone = new Array(1,2);tbl_useraccess=new Array(1,0);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "no space before = is rejected in tbl_useraccess",
+      "page": "tbl_statuszone = new Array(1,2);tbl_useraccess= new Array(1,0);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "no space after = is rejected in tbl_useraccess",
+      "page": "tbl_statuszone = new Array(1,2);tbl_useraccess =new Array(1,0);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a tab around = is rejected in tbl_useraccess",
+      "page": "tbl_statuszone = new Array(1,2);tbl_useraccess\t=\tnew Array(1,0);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a table name in upper case is rejected in tbl_statuszone",
+      "page": "TBL_STATUSZONE = new Array(1,2);tbl_useraccess = new Array(1,0);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a table name in upper case is rejected in tbl_useraccess",
+      "page": "tbl_statuszone = new Array(1,2);TBL_USERACCESS = new Array(1,0);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a space inside the parentheses is rejected in tbl_statuszone",
+      "page": "tbl_statuszone = new Array( 1,2 );tbl_useraccess = new Array(1,0);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a space inside the parentheses is rejected in tbl_useraccess",
+      "page": "tbl_statuszone = new Array(1,2);tbl_useraccess = new Array( 1,0 );",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a space before the opening parenthesis is rejected in tbl_statuszone",
+      "page": "tbl_statuszone = new Array (1,2);tbl_useraccess = new Array(1,0);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a space before the opening parenthesis is rejected in tbl_useraccess",
+      "page": "tbl_statuszone = new Array(1,2);tbl_useraccess = new Array (1,0);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a non-ASCII digit is rejected in tbl_statuszone",
+      "page": "tbl_statuszone = new Array(\u0663,2);tbl_useraccess = new Array(1,0);",
+      "expected": { "error": "Regex didn't match the value" },
+      "note": "JavaScript \\d matches only the ASCII digits 0-9; Python str patterns also match other Unicode digits unless re.ASCII is set."
+    },
+    {
+      "name": "a non-ASCII digit is rejected in tbl_useraccess",
+      "page": "tbl_statuszone = new Array(1,2);tbl_useraccess = new Array(\u0663,2);",
+      "expected": { "error": "Regex didn't match the value" },
+      "note": "JavaScript \\d matches only the ASCII digits 0-9; Python str patterns also match other Unicode digits unless re.ASCII is set."
+    },
+    {
+      "name": "useraccess table missing is an error",
+      "page": "tbl_statuszone = new Array(1,1);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "statuszone table missing is an error",
+      "page": "tbl_useraccess = new Array(1,0);",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "empty page is an error",
+      "page": "",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "page without tables is an error",
+      "page": "OK",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "index page instead of the status page is an error",
+      "page": { "file": "data/index_page.html" },
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "login page served after the session expired is an error",
+      "page": { "file": "data/login_page.html" },
+      "expected": { "error": "Regex didn't match the value" },
+      "known_bug": "KB-12",
+      "note": "The panel answers an expired session with HTTP 200 and the login page; the only symptom is the parse error."
+    }
+  ],
+  "requests": [
+    {
+      "operation": "getStatus",
+      "request": "GET /statuslive.html",
+      "absent_headers": ["referer", "cookie", "authorization"]
+    },
+    {
+      "operation": "sendKeepAlive",
+      "request": "GET /keep_alive.html?msgid=1",
+      "known_bug": "KB-9",
+      "absent_headers": ["referer", "cookie", "authorization"],
+      "note": "The random cache-buster the code computes is dropped by the HTTP client (null parameter value) and never reaches the wire."
+    },
+    {
+      "operation": "arm",
+      "request": "GET /statuslive.html?area=00&value=r",
+      "known_bug": "KB-18",
+      "absent_headers": ["referer", "cookie", "authorization"],
+      "note": "area is always 00 although the panel has two areas."
+    },
+    {
+      "operation": "disarm",
+      "request": "GET /statuslive.html?area=00&value=d",
+      "known_bug": "KB-18",
+      "absent_headers": ["referer", "cookie", "authorization"],
+      "note": "area is always 00 although the panel has two areas."
+    }
+  ],
+  "body_ignoring_responses": [
+    {
+      "name": "empty 200 is success",
+      "response": { "status": 200, "body": "" },
+      "expected": { "result": null }
+    },
+    {
+      "name": "204 without a body is success",
+      "response": { "status": 204, "body": "" },
+      "expected": { "result": null }
+    },
+    {
+      "name": "the status page is success",
+      "response": {
+        "status": 200,
+        "body": { "file": "data/unarmed.html" }
+      },
+      "expected": { "result": null }
+    },
+    {
+      "name": "unrelated text is success",
+      "response": { "status": 200, "body": "command refused" },
+      "expected": { "result": null },
+      "known_bug": "KB-14"
+    },
+    {
+      "name": "the login page (expired session) is success",
+      "response": {
+        "status": 200,
+        "body": { "file": "data/login_page.html" }
+      },
+      "expected": { "result": null },
+      "known_bug": "KB-14"
+    },
+    {
+      "name": "HTTP 500 is a failure",
+      "response": { "status": 500, "body": "boom" },
+      "expected": { "error": "Request failed with status code 500" }
+    },
+    {
+      "name": "HTTP 503 is a failure",
+      "response": { "status": 503, "body": "" },
+      "expected": { "error": "Request failed with status code 503" }
+    },
+    {
+      "name": "HTTP 404 is a failure",
+      "response": { "status": 404, "body": "Not found" },
+      "expected": { "error": "Request failed with status code 404" }
+    },
+    {
+      "name": "HTTP 403 is a failure",
+      "response": { "status": 403, "body": "" },
+      "expected": { "error": "Request failed with status code 403" }
+    },
+    {
+      "name": "a redirect without a Location header is a failure",
+      "response": { "status": 302, "body": "" },
+      "expected": { "error": "Request failed with status code 302" }
+    }
+  ]
+}

@@ -1,0 +1,639 @@
+{
+  "_comment": "Case tables for src/util.js, plus the signal table of src/signal.js (too small for a file of its own). Rows with known_bug pin a defect on purpose; rows with js_only depend on JavaScript semantics a port need not copy. A missing or null array in deepArrayEqual means 'no array' (undefined in JS, None in Python). getJsValue rows: content is a string or {file} relative to tests/; pattern is a regex source (JS and Python agree on every pattern here; flags are never needed). Retry rows: attempts is the script of successive calls, throws raises an error with that message, expected.throws is the message of the error that comes out. Expected values of the captured-page rows were extracted independently with Python's re and json.",
+  "deepArrayEqual": [
+    {
+      "name": "empty arrays are equal",
+      "a": [],
+      "b": [],
+      "expected": true
+    },
+    {
+      "name": "same numbers",
+      "a": [1, 2, 3],
+      "b": [1, 2, 3],
+      "expected": true
+    },
+    {
+      "name": "same strings",
+      "a": ["a", "b"],
+      "b": ["a", "b"],
+      "expected": true
+    },
+    {
+      "name": "single element",
+      "a": [0],
+      "b": [0],
+      "expected": true
+    },
+    {
+      "name": "null elements are equal",
+      "a": [null],
+      "b": [null],
+      "expected": true
+    },
+    {
+      "name": "first element differs",
+      "a": [1, 2, 3],
+      "b": [9, 2, 3],
+      "expected": false
+    },
+    {
+      "name": "middle element differs",
+      "a": [1, 2, 3],
+      "b": [1, 9, 3],
+      "expected": false
+    },
+    {
+      "name": "last element differs",
+      "a": [1, 2, 3],
+      "b": [1, 2, 9],
+      "expected": false
+    },
+    {
+      "name": "same elements, different order",
+      "a": [1, 2],
+      "b": [2, 1],
+      "expected": false
+    },
+    {
+      "name": "a is a prefix of b",
+      "a": [1, 2],
+      "b": [1, 2, 3],
+      "expected": false
+    },
+    {
+      "name": "b is a prefix of a",
+      "a": [1, 2, 3],
+      "b": [1, 2],
+      "expected": false
+    },
+    {
+      "name": "empty against non-empty",
+      "a": [],
+      "b": [1],
+      "expected": false
+    },
+    {
+      "name": "non-empty against empty",
+      "a": [1],
+      "b": [],
+      "expected": false
+    },
+    {
+      "name": "a is missing",
+      "a": null,
+      "b": [1],
+      "expected": false
+    },
+    {
+      "name": "b is missing",
+      "a": [1],
+      "b": null,
+      "expected": false
+    },
+    {
+      "name": "both missing are not equal",
+      "a": null,
+      "b": null,
+      "expected": false
+    },
+    {
+      "name": "missing against empty",
+      "a": null,
+      "b": [],
+      "expected": false
+    },
+    {
+      "name": "empty against missing",
+      "a": [],
+      "b": null,
+      "expected": false
+    },
+    {
+      "name": "number against its string form",
+      "a": [1],
+      "b": ["1"],
+      "expected": false
+    },
+    {
+      "name": "zero against false",
+      "a": [0],
+      "b": [false],
+      "expected": false,
+      "note": "Strict equality: a Python port must not use == (0 == False there)."
+    },
+    {
+      "name": "null against zero",
+      "a": [null],
+      "b": [0],
+      "expected": false
+    },
+    {
+      "name": "captured status: identical 32 zone statuses",
+      "a": [
+        5, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+      ],
+      "b": [
+        5, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+      ],
+      "expected": true
+    },
+    {
+      "name": "captured status: only the last of 32 zones changed",
+      "a": [
+        5, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+      ],
+      "b": [
+        5, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6
+      ],
+      "expected": false
+    },
+    {
+      "name": "captured status: only the first of 32 zones changed",
+      "a": [
+        5, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+      ],
+      "b": [
+        6, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+      ],
+      "expected": false
+    },
+    {
+      "name": "captured status: area state 1 against 2",
+      "a": [1, 0],
+      "b": [2, 0],
+      "expected": false
+    },
+    {
+      "name": "nested arrays with equal content are not equal",
+      "a": [[1, 2]],
+      "b": [[1, 2]],
+      "expected": false,
+      "known_bug": "KB-6",
+      "note": "Elements are compared with ===, so equal-looking nested arrays differ. Name says deep, behavior is shallow. Never hit in production: all statuses are flat integer arrays."
+    },
+    {
+      "name": "objects with equal content are not equal",
+      "a": [{"a": 1}],
+      "b": [{"a": 1}],
+      "expected": false,
+      "known_bug": "KB-6"
+    }
+  ],
+  "getJsValue": [
+    {
+      "name": "integer array",
+      "content": "tbl_useraccess = new Array(1,0);",
+      "pattern": "tbl_useraccess[ ]+=[ ]+(new Array\\((?:\\d,?)*\\))",
+      "expected": [1, 0]
+    },
+    {
+      "name": "empty array",
+      "content": "tbl_alarmes = new Array();",
+      "pattern": "tbl_alarmes[ ]+=[ ]+(new Array\\((?:\"\\d\",?)*\\))",
+      "expected": []
+    },
+    {
+      "name": "array of numeric strings",
+      "content": "tbl_troubles = new Array(\"16\",\"19\",\"38\");",
+      "pattern": "tbl_troubles[ ]+=[ ]+(new Array\\((?:\"\\d+\",?)*\\))",
+      "expected": ["16", "19", "38"]
+    },
+    {
+      "name": "numbers and strings mixed, as in the zone table",
+      "content": "tbl_zone = new Array(1,\"Door\",0,\" \");",
+      "pattern": "tbl_zone[ ]+=[ ]+(new Array\\((?:\\d,\"[\\w ]+\",?)*\\))",
+      "expected": [1, "Door", 0, " "]
+    },
+    {
+      "name": "array literal",
+      "content": "x = [1, 2, 3];",
+      "pattern": "x = (\\[.*?\\])",
+      "expected": [1, 2, 3]
+    },
+    {
+      "name": "nested arrays",
+      "content": "x = [[1, 2], [3]];",
+      "pattern": "x = (\\[.*\\]);",
+      "expected": [[1, 2], [3]]
+    },
+    {
+      "name": "bare number",
+      "content": "var ProductVer=532;",
+      "pattern": "ProductVer=(\\d+)",
+      "expected": 532
+    },
+    {
+      "name": "quoted string stays a string",
+      "content": "var ProductID=\"26\";",
+      "pattern": "ProductID=(\"\\d+\")",
+      "expected": "26"
+    },
+    {
+      "name": "non-ASCII text in strings",
+      "content": "tbl_areanam = new Array(\"Časť 1\",\"Časť 2\");",
+      "pattern": "tbl_areanam[ ]+=[ ]+(new Array\\([^)]*\\))",
+      "expected": ["Časť 1", "Časť 2"]
+    },
+    {
+      "name": "only capture group 1 is evaluated",
+      "content": "a=[1] b=[2]",
+      "pattern": "a=(\\[\\d\\]) b=(\\[\\d\\])",
+      "expected": [1]
+    },
+    {
+      "name": "only the first match in the content is used",
+      "content": "v=[1] v=[2]",
+      "pattern": "v=(\\[\\d\\])",
+      "expected": [1]
+    },
+    {
+      "name": "captured index page: zone table of 32 slots",
+      "content": {"file": "data/index_page.html"},
+      "pattern": "tbl_zone[ ]+=[ ]+(new Array\\((?:\\d,\"[\\w ]+\",?)*\\))",
+      "expected": [
+        1, "Predsien", 1, "Lava izba", 1, "Prava izba", 1, "Spalna", 1, "Obyvacka", 1, "Chodba", 0, " ", 0, " ", 0,
+        " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ",
+        0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " "
+      ]
+    },
+    {
+      "name": "captured index page: area names",
+      "content": {"file": "data/index_page.html"},
+      "pattern": "tbl_areanam[ ]+=[ ]+(new Array\\([^)]*\\))",
+      "expected": ["Cast 1", "Cast 2"]
+    },
+    {
+      "name": "captured armed page: 32 zone statuses",
+      "content": {"file": "data/armed.html"},
+      "pattern": "tbl_statuszone[ ]+=[ ]+(new Array\\((?:\\d,?)*\\))",
+      "expected": [
+        5, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+      ]
+    },
+    {
+      "name": "captured armed page: area states",
+      "content": {"file": "data/armed.html"},
+      "pattern": "tbl_useraccess[ ]+=[ ]+(new Array\\((?:\\d,?)*\\))",
+      "expected": [7, 0]
+    },
+    {
+      "name": "captured unarmed page: area states",
+      "content": {"file": "data/unarmed.html"},
+      "pattern": "tbl_useraccess[ ]+=[ ]+(new Array\\((?:\\d,?)*\\))",
+      "expected": [1, 0]
+    },
+    {
+      "name": "captured status page: empty alarm table",
+      "content": {"file": "data/armed.html"},
+      "pattern": "tbl_alarmes[ ]+=[ ]+(new Array\\((?:\"\\d\",?)*\\))",
+      "expected": []
+    },
+    {
+      "name": "captured status page: trouble codes",
+      "content": {"file": "data/armed.html"},
+      "pattern": "tbl_troubles[ ]+=[ ]+(new Array\\((?:\"\\d+\",?)*\\))",
+      "expected": ["16", "19", "38"]
+    },
+    {
+      "name": "getjsvalue-evals-content: arithmetic in the match is computed, not parsed as a literal",
+      "content": "x=1+2",
+      "pattern": "x=(.*)",
+      "known_bug": "KB-39",
+      "js_only": true,
+      "note": "The matched text is executed as JavaScript (vm), not parsed as a literal. A port should parse array/number/string literals only.",
+      "expected": 3
+    }
+  ],
+  "getJsValue_errors": [
+    {
+      "name": "no match in empty content",
+      "content": "",
+      "pattern": "(x)",
+      "error": "Regex didn't match the value"
+    },
+    {
+      "name": "no match in unrelated content",
+      "content": "hello",
+      "pattern": "(z)",
+      "error": "Regex didn't match the value"
+    },
+    {
+      "name": "login page where the status page was expected (expired session)",
+      "content": {"file": "data/login_page.html"},
+      "pattern": "tbl_statuszone[ ]+=[ ]+(new Array\\((?:\\d,?)*\\))",
+      "note": "What the status poll sees once the panel dropped the session; see KB-12 for the consequence.",
+      "error": "Regex didn't match the value"
+    },
+    {
+      "name": "a pattern that is stricter than the page (zone name with a hyphen)",
+      "content": "tbl_zone = new Array(1,\"Back-door\",0,\" \")",
+      "pattern": "tbl_zone[ ]+=[ ]+(new Array\\((?:\\d,\"[\\w ]+\",?)*\\))",
+      "note": "Same failure mode as KB-10, seen from util.",
+      "error": "Regex didn't match the value"
+    }
+  ],
+  "iterateTuples": [
+    {
+      "name": "empty list",
+      "list": [],
+      "expected": []
+    },
+    {
+      "name": "one pair",
+      "list": [1, "A"],
+      "expected": [[1, "A"]]
+    },
+    {
+      "name": "2 pairs (4 items) yield only 1",
+      "list": [1, "A", 0, "B"],
+      "expected": [[1, "A"]],
+      "known_bug": "KB-1",
+      "note": "A correct version yields all 2 pairs."
+    },
+    {
+      "name": "3 pairs (6 items) yield only 2",
+      "list": [1, "A", 0, "B", 1, "C"],
+      "expected": [[1, "A"], [0, "B"]],
+      "known_bug": "KB-1",
+      "note": "A correct version yields all 3 pairs."
+    },
+    {
+      "name": "4 pairs (8 items) yield only 2",
+      "list": [1, "A", 0, "B", 1, "C", 0, "D"],
+      "expected": [[1, "A"], [0, "B"]],
+      "known_bug": "KB-1",
+      "note": "A correct version yields all 4 pairs."
+    },
+    {
+      "name": "5 pairs (10 items) yield only 3",
+      "list": [1, "A", 0, "B", 1, "C", 0, "D", 1, "E"],
+      "expected": [[1, "A"], [0, "B"], [1, "C"]],
+      "known_bug": "KB-1",
+      "note": "A correct version yields all 5 pairs."
+    },
+    {
+      "name": "6 pairs (12 items) yield only 3",
+      "list": [1, "A", 0, "B", 1, "C", 0, "D", 1, "E", 0, "F"],
+      "expected": [[1, "A"], [0, "B"], [1, "C"]],
+      "known_bug": "KB-1",
+      "note": "A correct version yields all 6 pairs."
+    },
+    {
+      "name": "7 pairs (14 items) yield only 4",
+      "list": [1, "A", 0, "B", 1, "C", 0, "D", 1, "E", 0, "F", 1, "G"],
+      "expected": [[1, "A"], [0, "B"], [1, "C"], [0, "D"]],
+      "known_bug": "KB-1",
+      "note": "A correct version yields all 7 pairs."
+    },
+    {
+      "name": "8 pairs (16 items) yield only 4",
+      "list": [1, "A", 0, "B", 1, "C", 0, "D", 1, "E", 0, "F", 1, "G", 0, "H"],
+      "expected": [[1, "A"], [0, "B"], [1, "C"], [0, "D"]],
+      "known_bug": "KB-1",
+      "note": "A correct version yields all 8 pairs."
+    },
+    {
+      "name": "32 enabled zones: zones 17 to 32 are never seen",
+      "list": [
+        1, "Z1", 1, "Z2", 1, "Z3", 1, "Z4", 1, "Z5", 1, "Z6", 1, "Z7", 1, "Z8", 1, "Z9", 1, "Z10", 1, "Z11", 1,
+        "Z12", 1, "Z13", 1, "Z14", 1, "Z15", 1, "Z16", 1, "Z17", 1, "Z18", 1, "Z19", 1, "Z20", 1, "Z21", 1, "Z22", 1,
+        "Z23", 1, "Z24", 1, "Z25", 1, "Z26", 1, "Z27", 1, "Z28", 1, "Z29", 1, "Z30", 1, "Z31", 1, "Z32"
+      ],
+      "expected": [
+        [1, "Z1"],
+        [1, "Z2"],
+        [1, "Z3"],
+        [1, "Z4"],
+        [1, "Z5"],
+        [1, "Z6"],
+        [1, "Z7"],
+        [1, "Z8"],
+        [1, "Z9"],
+        [1, "Z10"],
+        [1, "Z11"],
+        [1, "Z12"],
+        [1, "Z13"],
+        [1, "Z14"],
+        [1, "Z15"],
+        [1, "Z16"]
+      ],
+      "known_bug": "KB-1",
+      "note": "A correct version yields all 32 pairs."
+    },
+    {
+      "name": "captured index page: 32 zone slots yield only 16 pairs, which still include all six enabled zones",
+      "list": [
+        1, "Predsien", 1, "Lava izba", 1, "Prava izba", 1, "Spalna", 1, "Obyvacka", 1, "Chodba", 0, " ", 0, " ", 0,
+        " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ",
+        0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " "
+      ],
+      "expected": [
+        [1, "Predsien"],
+        [1, "Lava izba"],
+        [1, "Prava izba"],
+        [1, "Spalna"],
+        [1, "Obyvacka"],
+        [1, "Chodba"],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "]
+      ],
+      "note": "The slots after the 16th are all disabled on this panel, so the data loss only shows with more than 16 zones. A correct version yields all 32 pairs.",
+      "known_bug": "KB-1"
+    }
+  ],
+  "iterateTuples_errors": [
+    {
+      "name": "1 items",
+      "list": [1],
+      "error": "Invalid list length, should be divisible by tuple size"
+    },
+    {
+      "name": "3 items",
+      "list": [1, "A", 0],
+      "error": "Invalid list length, should be divisible by tuple size"
+    },
+    {
+      "name": "5 items",
+      "list": [1, "A", 0, "B", 1],
+      "error": "Invalid list length, should be divisible by tuple size"
+    },
+    {
+      "name": "7 items",
+      "list": [1, "A", 0, "B", 1, "C", 0],
+      "error": "Invalid list length, should be divisible by tuple size"
+    },
+    {
+      "name": "15 items",
+      "list": [1, "A", 0, "B", 1, "C", 0, "D", 1, "E", 0, "F", 1, "G", 0],
+      "error": "Invalid list length, should be divisible by tuple size"
+    },
+    {
+      "name": "63 items (one short of a full zone table)",
+      "list": [
+        1, "Z1", 1, "Z2", 1, "Z3", 1, "Z4", 1, "Z5", 1, "Z6", 1, "Z7", 1, "Z8", 1, "Z9", 1, "Z10", 1, "Z11", 1,
+        "Z12", 1, "Z13", 1, "Z14", 1, "Z15", 1, "Z16", 1, "Z17", 1, "Z18", 1, "Z19", 1, "Z20", 1, "Z21", 1, "Z22", 1,
+        "Z23", 1, "Z24", 1, "Z25", 1, "Z26", 1, "Z27", 1, "Z28", 1, "Z29", 1, "Z30", 1, "Z31", 1
+      ],
+      "error": "Invalid list length, should be divisible by tuple size"
+    }
+  ],
+  "retry": [
+    {
+      "name": "first attempt succeeds",
+      "max_retries": 3,
+      "wait_ms": 1000,
+      "attempts": [{"returns": "ok"}],
+      "expected": {"calls": 1, "returns": "ok"}
+    },
+    {
+      "name": "returns what the function returned, falsy values included",
+      "max_retries": 3,
+      "wait_ms": 1000,
+      "attempts": [{"returns": 0}],
+      "expected": {"calls": 1, "returns": 0}
+    },
+    {
+      "name": "null result is returned, not retried",
+      "max_retries": 3,
+      "wait_ms": 1000,
+      "attempts": [{"returns": null}],
+      "expected": {"calls": 1, "returns": null}
+    },
+    {
+      "name": "one failure, then success",
+      "max_retries": 3,
+      "wait_ms": 1000,
+      "attempts": [{"throws": "e1"}, {"returns": "ok"}],
+      "expected": {"calls": 2, "returns": "ok"}
+    },
+    {
+      "name": "succeeds on the last allowed attempt",
+      "max_retries": 2,
+      "wait_ms": 1000,
+      "attempts": [{"throws": "e1"}, {"throws": "e2"}, {"returns": "ok"}],
+      "expected": {"calls": 3, "returns": "ok"}
+    },
+    {
+      "name": "one attempt too late: gives up after max_retries + 1 calls and rethrows the LAST error",
+      "max_retries": 2,
+      "wait_ms": 1000,
+      "attempts": [{"throws": "e1"}, {"throws": "e2"}, {"throws": "e3"}, {"returns": "too late"}],
+      "expected": {"calls": 3, "throws": "e3"}
+    },
+    {
+      "name": "max_retries 0 means a single attempt",
+      "max_retries": 0,
+      "wait_ms": 1000,
+      "attempts": [{"throws": "e1"}, {"returns": "ok"}],
+      "expected": {"calls": 1, "throws": "e1"}
+    },
+    {
+      "name": "max_retries 0 and success",
+      "max_retries": 0,
+      "wait_ms": 1000,
+      "attempts": [{"returns": "ok"}],
+      "expected": {"calls": 1, "returns": "ok"}
+    },
+    {
+      "name": "negative max_retries behaves like 0",
+      "max_retries": -1,
+      "wait_ms": 1000,
+      "attempts": [{"throws": "e1"}, {"returns": "ok"}],
+      "expected": {"calls": 1, "throws": "e1"}
+    },
+    {
+      "name": "max_retries 1: two calls, last error wins",
+      "max_retries": 1,
+      "wait_ms": 1000,
+      "attempts": [{"throws": "e1"}, {"throws": "e2"}],
+      "expected": {"calls": 2, "throws": "e2"}
+    },
+    {
+      "name": "index page settings: 10 retries are 11 calls",
+      "max_retries": 10,
+      "wait_ms": 1000,
+      "attempts": [
+        {"throws": "e1"},
+        {"throws": "e2"},
+        {"throws": "e3"},
+        {"throws": "e4"},
+        {"throws": "e5"},
+        {"throws": "e6"},
+        {"throws": "e7"},
+        {"throws": "e8"},
+        {"throws": "e9"},
+        {"throws": "e10"},
+        {"throws": "e11"},
+        {"returns": "too late"}
+      ],
+      "expected": {"calls": 11, "throws": "e11"}
+    },
+    {
+      "name": "succeeds on the 11th call with 10 retries",
+      "max_retries": 10,
+      "wait_ms": 1000,
+      "attempts": [
+        {"throws": "e1"},
+        {"throws": "e2"},
+        {"throws": "e3"},
+        {"throws": "e4"},
+        {"throws": "e5"},
+        {"throws": "e6"},
+        {"throws": "e7"},
+        {"throws": "e8"},
+        {"throws": "e9"},
+        {"throws": "e10"},
+        {"returns": "ok"}
+      ],
+      "expected": {"calls": 11, "returns": "ok"}
+    }
+  ],
+  "objectEntries": [
+    {
+      "name": "insertion order is kept",
+      "object": {"b": 1, "a": 2},
+      "expected": [["b", 1], ["a", 2]]
+    },
+    {
+      "name": "empty object",
+      "object": {},
+      "expected": []
+    },
+    {
+      "name": "values pass through unchanged",
+      "object": {"list": [1, 2], "inner": {"k": null}},
+      "expected": [["list", [1, 2]], ["inner", {"k": null}]]
+    },
+    {
+      "name": "the signal table",
+      "object": {"SIGHUP": 1, "SIGINT": 2, "SIGTERM": 15},
+      "expected": [["SIGHUP", 1], ["SIGINT", 2], ["SIGTERM", 15]]
+    }
+  ],
+  "signals": [
+    {
+      "signal": "SIGHUP",
+      "number": 1,
+      "exit_code": 129
+    },
+    {
+      "signal": "SIGINT",
+      "number": 2,
+      "exit_code": 130
+    },
+    {
+      "signal": "SIGTERM",
+      "number": 15,
+      "exit_code": 143
+    }
+  ]
+}

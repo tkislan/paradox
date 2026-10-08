@@ -1,0 +1,752 @@
+{
+  "_comment": "State machine of src/status_listener.js and timers of src/keep_alive_worker.js. SCENARIO groups (first_poll, armed_codes, sensor_codes, transitions, zone_indexing, failures): { name, zones, polls, expected_events, known_bug?, note? }. zones are the [enabled, name] tuples handed to statusListener() (already filtered by login(); the listener only uses their count and order). polls has one entry per 1000 ms tick: { statuszone, useraccess } makes the panel serve those tables (status code per zone; area state codes, first entry is area 1; tables have 0 or >= 2 entries because a one-entry table is a JavaScript new Array(n)); { page: { file } } serves that captured page (relative to tests/); { fail } makes the panel misbehave for this tick only: { status: n, body? } HTTP answer with that status (default body: a short error text), { connection: \"refused\" | \"reset\" } transport failure, { page: { file } } HTTP 200 with a page that has no status tables. expected_events lists, in emission order over the whole run: [\"armedChanged\", true | false | null], [\"sensorChanged\", \"<zone index as a decimal string>\", true | false], [\"error\"]. Before the first poll the listener assumes armed = null and every sensor = false; it never announces that state, only differences from it. CADENCE groups (status_poll_cadence, keep_alive_cadence): { name, advance_ms: [...], expected_requests: [...] } advance a fake clock step by step from the creation of the listener or worker and give the cumulative number of requests the panel has seen after each step (status polls: GET /statuslive.html; keep-alives: GET /keep_alive.html?msgid=1). keep_alive_failures: { name, ticks, expected_error_logged } one entry per 3000 ms tick, a { fail } as above or {}, and per tick whether the failure was reported (logged) by the worker. keep_alive_random: what Math.random() returns, and the only request ever sent. \"known_bug\" refers to the catalog in README.md;",
+  "first_poll": [
+    {
+      "name": "disarmed panel with closed zones: armed false is the only event (null -> false)",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [1, 0] }],
+      "expected_events": [["armedChanged", false]],
+      "known_bug": "KB-4",
+      "note": "The assumed initial armed state is null, so a disarmed panel counts as a change; closed zones equal the assumed initial false and emit nothing."
+    },
+    {
+      "name": "armed panel",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }],
+      "expected_events": [["armedChanged", true]]
+    },
+    {
+      "name": "arming (code 7) counts as armed",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [7, 0] }],
+      "expected_events": [["armedChanged", true]]
+    },
+    {
+      "name": "unknown armed code 0: nothing is emitted (null stays null)",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [0, 0] }],
+      "expected_events": [],
+      "known_bug": "KB-4",
+      "note": "An unknown armed state is never announced; a consumer keeps whatever it had."
+    },
+    {
+      "name": "unknown armed code 3 with closed zones: nothing is emitted",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [3, 0] }],
+      "expected_events": [],
+      "known_bug": "KB-4"
+    },
+    {
+      "name": "open zone on the first poll: armed first, then the sensor",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 0], "useraccess": [1, 0] }],
+      "expected_events": [["armedChanged", false], ["sensorChanged", "0", true]]
+    },
+    {
+      "name": "every zone open on the first poll: sensors in index order",
+      "zones": [[1, "A"], [1, "B"], [1, "C"]],
+      "polls": [{ "statuszone": [1, 1, 1], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "1", true], ["sensorChanged", "2", true]]
+    },
+    {
+      "name": "only the open zone is announced on the first poll",
+      "zones": [[1, "A"], [1, "B"], [1, "C"]],
+      "polls": [{ "statuszone": [0, 1, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "1", true]]
+    },
+    {
+      "name": "codes other than 1 on the first poll are closed: nothing is emitted",
+      "zones": [[1, "A"], [1, "B"], [1, "C"]],
+      "polls": [{ "statuszone": [5, 2, 6], "useraccess": [0, 0] }],
+      "expected_events": [],
+      "known_bug": "KB-4"
+    },
+    {
+      "name": "captured pages: unarmed, then armed",
+      "zones": [[1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"]],
+      "polls": [{ "page": { "file": "data/unarmed.html" } }, { "page": { "file": "data/armed.html" } }],
+      "expected_events": [["armedChanged", false], ["armedChanged", true]],
+      "known_bug": "KB-21",
+      "note": "Zone codes 5 and 6 of the captures are not \"open\", so no sensor ever fires."
+    }
+  ],
+  "armed_codes": [
+    {
+      "name": "code 1 after armed: disarmed",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [1, 0] }],
+      "expected_events": [["armedChanged", true], ["armedChanged", false]]
+    },
+    {
+      "name": "code 2 after disarmed: armed",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [1, 0] }, { "statuszone": [0, 0], "useraccess": [2, 0] }],
+      "expected_events": [["armedChanged", false], ["armedChanged", true]]
+    },
+    {
+      "name": "code 7 after disarmed: armed",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [1, 0] }, { "statuszone": [0, 0], "useraccess": [7, 0] }],
+      "expected_events": [["armedChanged", false], ["armedChanged", true]]
+    },
+    {
+      "name": "armed to arming (2 -> 7): no event",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [7, 0] }],
+      "expected_events": [["armedChanged", true]]
+    },
+    {
+      "name": "arming to armed (7 -> 2): no event",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [7, 0] }, { "statuszone": [0, 0], "useraccess": [2, 0] }],
+      "expected_events": [["armedChanged", true]]
+    },
+    {
+      "name": "arming to disarmed (7 -> 1)",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [7, 0] }, { "statuszone": [0, 0], "useraccess": [1, 0] }],
+      "expected_events": [["armedChanged", true], ["armedChanged", false]]
+    },
+    {
+      "name": "code 0 after armed: unknown (null)",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [0, 0] }],
+      "expected_events": [["armedChanged", true], ["armedChanged", null]]
+    },
+    {
+      "name": "code 3 after armed: unknown (null)",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [3, 0] }],
+      "expected_events": [["armedChanged", true], ["armedChanged", null]],
+      "known_bug": "KB-22",
+      "note": "Per the panel script notes in README.md (unverified on a real panel) 3 means \"in alarm\"; the bridge only maps 1, 2 and 7, so app.js just logs \"Unknown armed status\" and the retained armed topic keeps its old value."
+    },
+    {
+      "name": "code 4 after armed: unknown (null)",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [4, 0] }],
+      "expected_events": [["armedChanged", true], ["armedChanged", null]],
+      "known_bug": "KB-22",
+      "note": "Per the panel script notes in README.md (unverified on a real panel) 4 means \"sleep\"; the bridge only maps 1, 2 and 7, so app.js just logs \"Unknown armed status\" and the retained armed topic keeps its old value."
+    },
+    {
+      "name": "code 5 after armed: unknown (null)",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [5, 0] }],
+      "expected_events": [["armedChanged", true], ["armedChanged", null]],
+      "known_bug": "KB-22",
+      "note": "Per the panel script notes in README.md (unverified on a real panel) 5 means \"stay\"; the bridge only maps 1, 2 and 7, so app.js just logs \"Unknown armed status\" and the retained armed topic keeps its old value."
+    },
+    {
+      "name": "code 6 after armed: unknown (null)",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [6, 0] }],
+      "expected_events": [["armedChanged", true], ["armedChanged", null]],
+      "known_bug": "KB-22",
+      "note": "Per the panel script notes in README.md (unverified on a real panel) 6 means \"entry delay\"; the bridge only maps 1, 2 and 7, so app.js just logs \"Unknown armed status\" and the retained armed topic keeps its old value."
+    },
+    {
+      "name": "code 8 after armed: unknown (null)",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [8, 0] }],
+      "expected_events": [["armedChanged", true], ["armedChanged", null]],
+      "known_bug": "KB-22",
+      "note": "Per the panel script notes in README.md (unverified on a real panel) 8 means \"ready\"; the bridge only maps 1, 2 and 7, so app.js just logs \"Unknown armed status\" and the retained armed topic keeps its old value."
+    },
+    {
+      "name": "code 9 after armed: unknown (null)",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [9, 0] }],
+      "expected_events": [["armedChanged", true], ["armedChanged", null]],
+      "known_bug": "KB-22",
+      "note": "Per the panel script notes in README.md (unverified on a real panel) 9 means \"not ready\"; the bridge only maps 1, 2 and 7, so app.js just logs \"Unknown armed status\" and the retained armed topic keeps its old value."
+    },
+    {
+      "name": "code 10 after armed: unknown (null)",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [10, 0] }],
+      "expected_events": [["armedChanged", true], ["armedChanged", null]],
+      "known_bug": "KB-22",
+      "note": "Per the panel script notes in README.md (unverified on a real panel) 10 means \"instant\"; the bridge only maps 1, 2 and 7, so app.js just logs \"Unknown armed status\" and the retained armed topic keeps its old value."
+    },
+    {
+      "name": "code 11 after armed: unknown (null)",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [11, 0] }],
+      "expected_events": [["armedChanged", true], ["armedChanged", null]]
+    },
+    {
+      "name": "code 12 after armed: unknown (null)",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [12, 0] }],
+      "expected_events": [["armedChanged", true], ["armedChanged", null]]
+    },
+    {
+      "name": "code 20 after armed: unknown (null)",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [20, 0] }],
+      "expected_events": [["armedChanged", true], ["armedChanged", null]]
+    },
+    {
+      "name": "code 70 after armed: unknown (null)",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [70, 0] }],
+      "expected_events": [["armedChanged", true], ["armedChanged", null]]
+    },
+    {
+      "name": "unknown after disarmed: null is emitted",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [1, 0] }, { "statuszone": [0, 0], "useraccess": [0, 0] }],
+      "expected_events": [["armedChanged", false], ["armedChanged", null]]
+    },
+    {
+      "name": "unknown and back: null then the state again",
+      "zones": [[1, "A"]],
+      "polls": [
+        { "statuszone": [0, 0], "useraccess": [2, 0] },
+        { "statuszone": [0, 0], "useraccess": [0, 0] },
+        { "statuszone": [0, 0], "useraccess": [2, 0] }
+      ],
+      "expected_events": [["armedChanged", true], ["armedChanged", null], ["armedChanged", true]]
+    },
+    {
+      "name": "empty useraccess table after armed: unknown (null)",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [] }],
+      "expected_events": [["armedChanged", true], ["armedChanged", null]]
+    },
+    {
+      "name": "area 2 armed while area 1 is disarmed: reported as disarmed",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [1, 2] }],
+      "expected_events": [["armedChanged", false]],
+      "known_bug": "KB-18",
+      "note": "Only useraccess[0], the first area, is read."
+    },
+    {
+      "name": "area 2 armed while area 1 is unknown: nothing is emitted",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [0, 2] }],
+      "expected_events": [],
+      "known_bug": "KB-18"
+    },
+    {
+      "name": "area 1 armed while area 2 is disarmed: reported as armed",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 1] }],
+      "expected_events": [["armedChanged", true]],
+      "known_bug": "KB-18"
+    },
+    {
+      "name": "changes of area 2 alone are invisible",
+      "zones": [[1, "A"]],
+      "polls": [
+        { "statuszone": [0, 0], "useraccess": [2, 0] },
+        { "statuszone": [0, 0], "useraccess": [2, 1] },
+        { "statuszone": [0, 0], "useraccess": [2, 7] },
+        { "statuszone": [0, 0], "useraccess": [2, 2] }
+      ],
+      "expected_events": [["armedChanged", true]],
+      "known_bug": "KB-18"
+    }
+  ],
+  "sensor_codes": [
+    {
+      "name": "code 1 is open",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [0, 0] }, { "statuszone": [1, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true]]
+    },
+    {
+      "name": "code 1 stays open: announced once",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [1, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true]]
+    },
+    {
+      "name": "code 0 after open: closed",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [0, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]]
+    },
+    {
+      "name": "code 2 after open: closed",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [2, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]],
+      "known_bug": "KB-21",
+      "note": "Per the panel script notes in README.md (unverified on a real panel) 2 means \"in alarm\" but only code 1 counts as open, so the sensor is announced as closed."
+    },
+    {
+      "name": "code 3 after open: closed",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [3, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]]
+    },
+    {
+      "name": "code 4 after open: closed",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [4, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]],
+      "known_bug": "KB-21",
+      "note": "Per the panel script notes in README.md (unverified on a real panel) 4 means \"open+trouble\" but only code 1 counts as open, so the sensor is announced as closed."
+    },
+    {
+      "name": "code 5 after open: closed",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [5, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]]
+    },
+    {
+      "name": "code 6 after open: closed",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [6, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]],
+      "known_bug": "KB-21",
+      "note": "Per the panel script notes in README.md (unverified on a real panel) 6 means \"open+memory\" but only code 1 counts as open, so the sensor is announced as closed."
+    },
+    {
+      "name": "code 7 after open: closed",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [7, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]]
+    },
+    {
+      "name": "code 8 after open: closed",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [8, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]]
+    },
+    {
+      "name": "code 9 after open: closed",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [9, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]]
+    },
+    {
+      "name": "code 10 after open: closed",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [10, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]]
+    },
+    {
+      "name": "code 11 after open: closed",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [11, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]]
+    },
+    {
+      "name": "code 12 after open: closed",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [12, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]]
+    },
+    {
+      "name": "only the second zone is open",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [0, 0] }, { "statuszone": [0, 1], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "1", true]]
+    },
+    {
+      "name": "open code 1 in a longer table (32 entries) is read at its position",
+      "zones": [[1, "A"], [1, "B"], [1, "C"]],
+      "polls": [
+        {
+          "statuszone": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+          "useraccess": [0, 0]
+        },
+        {
+          "statuszone": [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+          "useraccess": [0, 0]
+        }
+      ],
+      "expected_events": [["sensorChanged", "2", true]]
+    }
+  ],
+  "transitions": [
+    {
+      "name": "identical polls emit once",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [
+        { "statuszone": [1, 0], "useraccess": [2, 0] },
+        { "statuszone": [1, 0], "useraccess": [2, 0] },
+        { "statuszone": [1, 0], "useraccess": [2, 0] }
+      ],
+      "expected_events": [["armedChanged", true], ["sensorChanged", "0", true]]
+    },
+    {
+      "name": "a sensor opens, closes and opens again: every change is emitted",
+      "zones": [[1, "A"]],
+      "polls": [
+        { "statuszone": [1, 0], "useraccess": [0, 0] },
+        { "statuszone": [0, 0], "useraccess": [0, 0] },
+        { "statuszone": [1, 0], "useraccess": [0, 0] }
+      ],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false], ["sensorChanged", "0", true]]
+    },
+    {
+      "name": "armed toggles: every change is emitted",
+      "zones": [[1, "A"]],
+      "polls": [
+        { "statuszone": [0, 0], "useraccess": [1, 0] },
+        { "statuszone": [0, 0], "useraccess": [2, 0] },
+        { "statuszone": [0, 0], "useraccess": [1, 0] }
+      ],
+      "expected_events": [["armedChanged", false], ["armedChanged", true], ["armedChanged", false]]
+    },
+    {
+      "name": "only the sensor that changed is emitted",
+      "zones": [[1, "A"], [1, "B"], [1, "C"]],
+      "polls": [
+        { "statuszone": [0, 0, 0], "useraccess": [0, 0] },
+        { "statuszone": [0, 1, 0], "useraccess": [0, 0] },
+        { "statuszone": [0, 1, 1], "useraccess": [0, 0] }
+      ],
+      "expected_events": [["sensorChanged", "1", true], ["sensorChanged", "2", true]]
+    },
+    {
+      "name": "armed and a sensor change in the same poll: armed first",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [1, 0] }, { "statuszone": [1, 0], "useraccess": [2, 0] }],
+      "expected_events": [["armedChanged", false], ["armedChanged", true], ["sensorChanged", "0", true]]
+    },
+    {
+      "name": "several sensors change in one poll: index order",
+      "zones": [[1, "A"], [1, "B"], [1, "C"]],
+      "polls": [{ "statuszone": [0, 0, 0], "useraccess": [0, 0] }, { "statuszone": [1, 0, 1], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "2", true]]
+    },
+    {
+      "name": "open and close in the same poll: both emitted in index order",
+      "zones": [[1, "A"], [1, "B"], [1, "C"]],
+      "polls": [{ "statuszone": [1, 0, 0], "useraccess": [0, 0] }, { "statuszone": [0, 0, 1], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false], ["sensorChanged", "2", true]]
+    },
+    {
+      "name": "twelve zones: indexes are decimal strings emitted in numeric order",
+      "zones": [
+        [1, "A"],
+        [1, "B"],
+        [1, "C"],
+        [1, "D"],
+        [1, "E"],
+        [1, "F"],
+        [1, "G"],
+        [1, "H"],
+        [1, "I"],
+        [1, "J"],
+        [1, "K"],
+        [1, "L"]
+      ],
+      "polls": [{ "statuszone": [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "9", true], ["sensorChanged", "10", true], ["sensorChanged", "11", true]]
+    },
+    {
+      "name": "zones beyond the zone list are ignored",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [0, 0, 1, 1], "useraccess": [0, 0] }],
+      "expected_events": []
+    },
+    {
+      "name": "statuszone shorter than the zone list: missing entries are closed",
+      "zones": [[1, "A"], [1, "B"], [1, "C"]],
+      "polls": [{ "statuszone": [1, 1, 1], "useraccess": [0, 0] }, { "statuszone": [1, 1], "useraccess": [0, 0] }],
+      "expected_events": [
+        ["sensorChanged", "0", true],
+        ["sensorChanged", "1", true],
+        ["sensorChanged", "2", true],
+        ["sensorChanged", "2", false]
+      ]
+    },
+    {
+      "name": "empty statuszone table closes every sensor",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 1], "useraccess": [0, 0] }, { "statuszone": [], "useraccess": [0, 0] }],
+      "expected_events": [
+        ["sensorChanged", "0", true],
+        ["sensorChanged", "1", true],
+        ["sensorChanged", "0", false],
+        ["sensorChanged", "1", false]
+      ]
+    },
+    {
+      "name": "no zones: only the armed state is tracked",
+      "zones": [],
+      "polls": [{ "statuszone": [1, 1], "useraccess": [2, 0] }],
+      "expected_events": [["armedChanged", true]]
+    },
+    {
+      "name": "no zones: nothing else is ever emitted",
+      "zones": [],
+      "polls": [
+        { "statuszone": [1, 1], "useraccess": [2, 0] },
+        { "statuszone": [0, 0], "useraccess": [2, 0] },
+        { "statuszone": [1, 1], "useraccess": [1, 0] }
+      ],
+      "expected_events": [["armedChanged", true], ["armedChanged", false]]
+    },
+    {
+      "name": "the enabled flag and the name of a zone tuple do not matter to the listener",
+      "zones": [[0, " "], [1, "B"]],
+      "polls": [{ "statuszone": [1, 1], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "1", true]],
+      "note": "Disabled zones are filtered out by login(); the listener indexes whatever list it is given."
+    },
+    {
+      "name": "armed and zones change over a longer run",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [
+        { "statuszone": [0, 0], "useraccess": [1, 0] },
+        { "statuszone": [1, 0], "useraccess": [1, 0] },
+        { "statuszone": [1, 1], "useraccess": [7, 0] },
+        { "statuszone": [0, 1], "useraccess": [7, 0] },
+        { "statuszone": [0, 0], "useraccess": [1, 0] }
+      ],
+      "expected_events": [
+        ["armedChanged", false],
+        ["sensorChanged", "0", true],
+        ["armedChanged", true],
+        ["sensorChanged", "1", true],
+        ["sensorChanged", "0", false],
+        ["armedChanged", false],
+        ["sensorChanged", "1", false]
+      ]
+    }
+  ],
+  "zone_indexing": [
+    {
+      "name": "real zones 0 and 2 enabled, zone 1 disabled: the real zone 2 (the Hall) opens in slot 2 and nothing is seen",
+      "zones": [[1, "Door"], [1, "Hall"]],
+      "polls": [{ "statuszone": [0, 0, 1], "useraccess": [0, 0] }],
+      "expected_events": [],
+      "known_bug": "KB-2",
+      "note": "login() drops the disabled zone and hands over two tuples; sensor 1 (\"Hall\") then reads statuszone[1], not statuszone[2]."
+    },
+    {
+      "name": "real zones 0 and 2 enabled, zone 1 disabled: slot 1 (the disabled zone) shows open and is reported as sensor 1, the Hall",
+      "zones": [[1, "Door"], [1, "Hall"]],
+      "polls": [{ "statuszone": [0, 1, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "1", true]],
+      "known_bug": "KB-2"
+    },
+    {
+      "name": "real zones 0 and 2 enabled, zone 1 disabled: the first zone is unaffected because no disabled zone precedes it",
+      "zones": [[1, "Door"], [1, "Hall"]],
+      "polls": [{ "statuszone": [1, 0, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true]],
+      "known_bug": "KB-2"
+    }
+  ],
+  "failures": [
+    {
+      "name": "a failing first poll emits one error and nothing else",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "fail": { "status": 500 } }],
+      "expected_events": [["error"]]
+    },
+    {
+      "name": "HTTP 404 is an error as well",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "fail": { "status": 404 } }],
+      "expected_events": [["error"]]
+    },
+    {
+      "name": "the poll after a failed first poll is compared with the initial state",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "fail": { "status": 500 } }, { "statuszone": [1, 0], "useraccess": [1, 0] }],
+      "expected_events": [["error"], ["armedChanged", false], ["sensorChanged", "0", true]]
+    },
+    {
+      "name": "a failed poll leaves the last good state untouched: the next identical poll emits nothing",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [
+        { "statuszone": [1, 0], "useraccess": [1, 0] },
+        { "fail": { "status": 500 } },
+        { "statuszone": [1, 0], "useraccess": [1, 0] }
+      ],
+      "expected_events": [["armedChanged", false], ["sensorChanged", "0", true], ["error"]]
+    },
+    {
+      "name": "changes that happened during the outage are emitted by the first good poll after it",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [
+        { "statuszone": [1, 0], "useraccess": [1, 0] },
+        { "fail": { "status": 500 } },
+        { "statuszone": [0, 1], "useraccess": [2, 0] }
+      ],
+      "expected_events": [
+        ["armedChanged", false],
+        ["sensorChanged", "0", true],
+        ["error"],
+        ["armedChanged", true],
+        ["sensorChanged", "0", false],
+        ["sensorChanged", "1", true]
+      ]
+    },
+    {
+      "name": "three failed polls in a row: one error each",
+      "zones": [[1, "A"]],
+      "polls": [{ "fail": { "status": 500 } }, { "fail": { "status": 500 } }, { "fail": { "status": 500 } }],
+      "expected_events": [["error"], ["error"], ["error"]]
+    },
+    {
+      "name": "connection refused is an error, and the listener recovers when the panel is back",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [
+        { "statuszone": [1, 0], "useraccess": [1, 0] },
+        { "fail": { "connection": "refused" } },
+        { "statuszone": [1, 0], "useraccess": [1, 0] }
+      ],
+      "expected_events": [["armedChanged", false], ["sensorChanged", "0", true], ["error"]]
+    },
+    {
+      "name": "connection reset is an error, and the listener recovers",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [
+        { "statuszone": [1, 0], "useraccess": [1, 0] },
+        { "fail": { "connection": "reset" } },
+        { "statuszone": [0, 0], "useraccess": [1, 0] }
+      ],
+      "expected_events": [["armedChanged", false], ["sensorChanged", "0", true], ["error"], ["sensorChanged", "0", false]]
+    },
+    {
+      "name": "the login page after the session expired is an error (HTTP 200, no status tables)",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [
+        { "statuszone": [1, 0], "useraccess": [1, 0] },
+        { "fail": { "page": { "file": "data/login_page.html" } } }
+      ],
+      "expected_events": [["armedChanged", false], ["sensorChanged", "0", true], ["error"]],
+      "known_bug": "KB-12",
+      "note": "The panel gives no other sign that the session is gone; the bridge never logs in again."
+    },
+    {
+      "name": "a persistently expired session fails every poll",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [
+        { "statuszone": [1, 0], "useraccess": [1, 0] },
+        { "fail": { "page": { "file": "data/login_page.html" } } },
+        { "fail": { "page": { "file": "data/login_page.html" } } },
+        { "fail": { "page": { "file": "data/login_page.html" } } }
+      ],
+      "expected_events": [["armedChanged", false], ["sensorChanged", "0", true], ["error"], ["error"], ["error"]],
+      "known_bug": "KB-12",
+      "note": "The listener itself keeps polling; app.js turns the first error into process.exit(1)."
+    },
+    {
+      "name": "a page without status tables is an error",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "fail": { "page": { "file": "data/index_page.html" } } }],
+      "expected_events": [["error"]]
+    },
+    {
+      "name": "an error between two identical armed polls does not re-announce the armed state",
+      "zones": [[1, "A"]],
+      "polls": [
+        { "statuszone": [0, 0], "useraccess": [2, 0] },
+        { "fail": { "status": 500 } },
+        { "statuszone": [0, 0], "useraccess": [2, 0] },
+        { "fail": { "connection": "reset" } },
+        { "statuszone": [0, 0], "useraccess": [2, 0] }
+      ],
+      "expected_events": [["armedChanged", true], ["error"], ["error"]]
+    }
+  ],
+  "status_poll_cadence": [
+    {
+      "name": "no poll at start-up, first poll exactly at 1000 ms",
+      "advance_ms": [0, 999, 1],
+      "expected_requests": [0, 0, 1]
+    },
+    {
+      "name": "one poll per 1000 ms",
+      "advance_ms": [1000, 999, 1, 999, 1],
+      "expected_requests": [1, 1, 2, 2, 3]
+    },
+    { "name": "a long jump runs every missed poll", "advance_ms": [5000], "expected_requests": [5] }
+  ],
+  "keep_alive_cadence": [
+    {
+      "name": "no keep-alive at start-up, first one exactly at 3000 ms",
+      "advance_ms": [0, 2999, 1],
+      "expected_requests": [0, 0, 1]
+    },
+    {
+      "name": "one keep-alive per 3000 ms",
+      "advance_ms": [3000, 2999, 1, 3000],
+      "expected_requests": [1, 1, 2, 3]
+    },
+    { "name": "a long jump runs every missed keep-alive", "advance_ms": [15000], "expected_requests": [5] }
+  ],
+  "keep_alive_failures": [
+    {
+      "name": "HTTP 500 is logged and the worker keeps running",
+      "ticks": [{ "fail": { "status": 500 } }, {  }],
+      "expected_error_logged": [true, false]
+    },
+    {
+      "name": "HTTP 404 is logged",
+      "ticks": [{ "fail": { "status": 404 } }],
+      "expected_error_logged": [true]
+    },
+    {
+      "name": "connection refused is logged and the worker keeps running",
+      "ticks": [{ "fail": { "connection": "refused" } }, {  }],
+      "expected_error_logged": [true, false]
+    },
+    {
+      "name": "connection reset is logged and the worker keeps running",
+      "ticks": [{ "fail": { "connection": "reset" } }, {  }],
+      "expected_error_logged": [true, false]
+    },
+    {
+      "name": "every failed keep-alive is logged separately",
+      "ticks": [{ "fail": { "status": 500 } }, { "fail": { "status": 500 } }, { "fail": { "status": 500 } }],
+      "expected_error_logged": [true, true, true]
+    },
+    {
+      "name": "the login page after the session expired counts as success",
+      "ticks": [{ "fail": { "page": { "file": "data/login_page.html" } } }, {  }],
+      "expected_error_logged": [false, false],
+      "known_bug": "KB-28",
+      "note": "The response is never inspected: a 2xx answer is success even when it says the session is gone (same family as KB-14)."
+    },
+    {
+      "name": "an empty 200 counts as success",
+      "ticks": [{ "fail": { "status": 200, "body": "" } }],
+      "expected_error_logged": [false]
+    }
+  ],
+  "keep_alive_random": [
+    {
+      "name": "Math.random() = 0",
+      "random": 0,
+      "expected_request": "GET /keep_alive.html?msgid=1",
+      "known_bug": "KB-9"
+    },
+    {
+      "name": "Math.random() = 1e-7",
+      "random": 1e-7,
+      "expected_request": "GET /keep_alive.html?msgid=1",
+      "known_bug": "KB-9"
+    },
+    {
+      "name": "Math.random() = 0.5",
+      "random": 0.5,
+      "expected_request": "GET /keep_alive.html?msgid=1",
+      "known_bug": "KB-9"
+    },
+    {
+      "name": "Math.random() = 0.123456789",
+      "random": 0.123456789,
+      "expected_request": "GET /keep_alive.html?msgid=1",
+      "known_bug": "KB-9"
+    },
+    {
+      "name": "Math.random() = 0.9999999999999999",
+      "random": 0.9999999999999999,
+      "expected_request": "GET /keep_alive.html?msgid=1",
+      "known_bug": "KB-9"
+    }
+  ]
+}
