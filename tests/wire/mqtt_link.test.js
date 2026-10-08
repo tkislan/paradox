@@ -1,127 +1,13 @@
-import { createRequire } from 'node:module';
-import net from 'node:net';
 import { inspect } from 'node:util';
 import { describe, expect, it, vi } from 'vitest';
 import { FakeBroker } from '../mock_mqtt.js';
 import { FakePanel } from '../mock_paradox.js';
+import { track } from '../helpers/outcomes.js';
+import { reservePort, settle, waitFor, withTitle } from '../support.js';
 import {
-  captureConsole, loadBridge, loadSpec, onCleanup, reservePort, setBridgeEnv, settle, spyProcessExit, useFakeClock, waitFor,
-  withTitle,
-} from '../support.js';
-
-const spec = loadSpec('mqtt');
-const mqttLib = createRequire(import.meta.url)('mqtt');
-
-const ARM_REQUEST = 'GET /statuslive.html?area=00&value=r';
-const DISARM_REQUEST = 'GET /statuslive.html?area=00&value=d';
-
-// The link never exposes its MQTT client. One left open would reconnect forever and, once its broker is gone,
-// call the real process.exit after the exit recorder has been removed, so each test closes its clients while
-// the recorder is still installed. With redirectDials, the only place the suite looks past the wire.
-function closeMqttClientsAfterTest() {
-  const connect = mqttLib.connect;
-  const clients = [];
-  vi.spyOn(mqttLib, 'connect').mockImplementation((...args) => {
-    const client = connect(...args);
-    clients.push(client);
-    return client;
-  });
-  onCleanup(() => endAll(clients));
-  return clients;
-}
-
-// end() on a client that is already ending never calls back, so tests that end clients themselves must not hang the cleanup.
-const endAll = (clients) => Promise.all(clients.filter((client) => !client.disconnecting).map((client) => new Promise((resolve) => client.end(true, resolve))));
-
-/**
- * Records every TCP dial the mqtt library makes and sends the connection to `target` instead: the way to see
- * which host and port the bridge dials without owning that port and without a DNS lookup.
- */
-function redirectDials(target) {
-  const dialed = [];
-  const createConnection = net.createConnection;
-  vi.spyOn(net, 'createConnection').mockImplementation((port, host) => {
-    dialed.push({ host, port });
-    return createConnection(target.port, target.hostname);
-  });
-  return dialed;
-}
-
-/** Answers every SUBSCRIBE with the failure code 0x80, as a broker whose ACL forbids the topic does. */
-class RefusingSubscriptions extends FakeBroker {
-  respond(client, packet) {
-    if (packet.cmd !== 'subscribe') {
-      super.respond(client, packet);
-      return;
-    }
-    client.send({ cmd: 'suback', messageId: packet.messageId, granted: packet.subscriptions.map(() => 0x80) });
-  }
-}
-
-/** `broker: false` leaves the MQTT port closed; the port is returned so a test can open it later. */
-async function arrange({ broker: brokerOptions = {}, brokerClass = FakeBroker, env = {} } = {}) {
-  const output = captureConsole();
-  const clock = useFakeClock();
-  const exit = spyProcessExit();
-  let broker = null;
-  let port;
-  if (brokerOptions === false) {
-    port = await reservePort();
-  } else {
-    broker = await new brokerClass(brokerOptions).start();
-    port = broker.port;
-  }
-  const clients = closeMqttClientsAfterTest();
-  setBridgeEnv({ MQTT_PORT: port, ...env });
-  const { createMqttLink } = loadBridge().load('mqtt_link.js');
-  return { broker, port, clock, exit, output, clients, createMqttLink };
-}
-
-/** Connects the link and waits until the broker has seen both SUBSCRIBE packets. */
-async function startLink({ broker, createMqttLink }) {
-  const link = await createMqttLink();
-  await waitFor(() => broker.subscriptions.length === 2, { message: 'both subscriptions' });
-  return link;
-}
-
-async function arrangeWithPanel({ panel: panelOptions, ...options } = {}) {
-  const panel = await new FakePanel(panelOptions).start();
-  const context = await arrange({ ...options, env: { HOSTNAME: panel.hostname, ...options.env } });
-  const link = await startLink(context);
-  return { ...context, panel, link };
-}
-
-/** Observes a promise without awaiting it, so fake-clock tests can assert "still pending" at a given instant. */
-function track(promise) {
-  const result = { state: 'pending' };
-  promise.then(
-    (value) => Object.assign(result, { state: 'resolved', value }),
-    (error) => Object.assign(result, { state: 'rejected', error }),
-  );
-  return result;
-}
-
-const settled = (tracked) => waitFor(() => tracked.state !== 'pending', { message: 'the connect attempt to settle' });
-
-/** Delivers a PUBLISH to every connected client even if it never subscribed to the topic. */
-function deliverToBridge(broker, topic, payload) {
-  broker.clients.forEach((client) => client.send({
-    cmd: 'publish', topic, payload: Buffer.from(payload), qos: 0, retain: false, dup: false,
-  }));
-}
-
-/** Writes raw bytes onto the broker side of every client connection. */
-function injectBytes(broker, bytes) {
-  broker.clients.forEach((client) => client.socket.write(Buffer.from(bytes)));
-}
-
-/** Advances the fake clock until `condition` holds; the mqtt client reconnects on its own 1 s timer. */
-function advanceUntil(clock, condition, message) {
-  return waitFor(async () => {
-    await clock.advance(1000);
-    return condition();
-  }, { message });
-}
+  ARM_REQUEST, DISARM_REQUEST, RefusingSubscriptions, SECRET_PASSWORD, advanceUntil, arrange, arrangeWithPanel,
+  deliverToBridge, endAll, injectBytes, redirectDials, settled, spec, startLink,
+} from '../helpers/mqtt_link.js';
 
 describe('createMqttLink(): connecting', () => {
   it('connects to MQTT_HOSTNAME:MQTT_PORT with a clean MQTT 3.1.1 session and the configured credentials', async () => {
@@ -292,11 +178,9 @@ describe('createMqttLink(): MQTT_HOSTNAME', () => {
 });
 
 describe('createMqttLink(): secrets', () => {
-  const PASSWORD = 'Sup3r-Secret-Pw';
-
   it('never logs the MQTT password while connecting, publishing or failing a command', async () => {
     const panel = await new FakePanel().start();
-    const context = await arrange({ env: { HOSTNAME: panel.hostname, MQTT_PASSWORD: PASSWORD } });
+    const context = await arrange({ env: { HOSTNAME: panel.hostname, MQTT_PASSWORD: SECRET_PASSWORD } });
     panel.respondWith('/statuslive.html', { status: 500, headers: {}, body: 'boom' });
     const link = await startLink(context);
 
@@ -305,19 +189,19 @@ describe('createMqttLink(): secrets', () => {
     await waitFor(() => context.output.error.length === 1, { message: 'the failed command' });
 
     expect(context.output.log.length).toBeGreaterThan(1);
-    expect(inspect(context.output, { depth: 8 })).not.toContain(PASSWORD);
+    expect(inspect(context.output, { depth: 8 })).not.toContain(SECRET_PASSWORD);
   });
 
   it('never logs the MQTT password when the broker refuses the login', async () => {
     const { output, createMqttLink } = await arrange({
-      broker: { credentials: { username: 'admin', password: 'secret' } }, env: { MQTT_PASSWORD: PASSWORD },
+      broker: { credentials: { username: 'admin', password: 'secret' } }, env: { MQTT_PASSWORD: SECRET_PASSWORD },
     });
 
     const link = track(createMqttLink());
     await settled(link);
 
     expect(output.error).toHaveLength(1);
-    expect(inspect([output, link.error], { depth: 8 })).not.toContain(PASSWORD);
+    expect(inspect([output, link.error], { depth: 8 })).not.toContain(SECRET_PASSWORD);
   });
 });
 
