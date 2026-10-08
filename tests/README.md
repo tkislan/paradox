@@ -49,6 +49,7 @@ evidence about exit codes, real signals and the Node 10.14 runtime, not coverage
 | `mock_paradox.js` | Fake panel: the HTTP contract the bridge needs, as a pure `handle()` plus a loopback server. |
 | `docker-compose.yml`, `mosquitto/mosquitto.conf`, `mosquitto.js` | Real Mosquitto brokers as test fixtures: lease, observation, users, TCP proxy for faults (see "MQTT tests" below). |
 | `support.js` | Loader for the built bridge, env, console/exit/signal/timer helpers. |
+| `helpers/`, `fixtures/` | Everything that is not a test case. `helpers/<area>.js` holds the code a test file needs (world builders, request/outcome assertions, scenario interpreters, small constants) and `fixtures/<area>.js` the scenario tables and shared data. Test files import from them and contain only `describe`/`it`. |
 | `unit/` | One module at a time, driven by `spec/` tables where the cases are data. |
 | `wire/` | `api/*` and `mqtt_link` against the fake panel / a real broker; assertions on requests, messages and broker-side events. |
 | `system/` | The whole bridge (`app.js`) in-process and as a child process. |
@@ -58,6 +59,7 @@ evidence about exit codes, real signals and the Node 10.14 runtime, not coverage
 - **Pin current behavior.** A test asserts what the code does now. Bugs and quirks are pinned too, titled
   `KNOWN BUG KB-n: ...` (catalog below) and tagged `"known_bug": "KB-n"` in spec files. A port decides per
   entry whether to keep or fix the behavior; the catalog says what the sensible fix is.
+- **Test files hold test cases only.** Setup, assertion helpers, scenario interpreters and data tables live in `helpers/` and `fixtures/` (one module per test file, plus a few shared ones: `outcomes`, `responses`, `panel_faults`), which is what a port re-creates as `conftest.py` and helper modules; the test files then translate one to one.
 - **Black box at the lowest observable boundary**: HTTP requests/responses, MQTT messages and broker events, REST responses,
   `process.exit` codes. No `vi.mock` of modules (it cannot intercept the CommonJS `require` graph and would
   tie tests to the implementation). Console output is not contractual; capture it to keep runs quiet.

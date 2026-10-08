@@ -1,21 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { FakePanel } from '../mock_paradox.js';
-import { captureConsole, loadBridge, loadSpec, setBridgeEnv, settle, useFakeClock, waitFor, withTitle } from '../support.js';
-import { drain, injectFailure } from './status_listener_support.js';
+import { loadSpec, settle, waitFor, withTitle } from '../support.js';
+import { drain, injectFailure } from '../helpers/panel_faults.js';
+import { KEEP_ALIVE, KEEP_ALIVE_LINE, boot } from '../helpers/keep_alive_worker.js';
 
 const spec = loadSpec('status_machine');
-
-const KEEP_ALIVE = '/keep_alive.html';
-const KEEP_ALIVE_LINE = 'GET /keep_alive.html?msgid=1';
-
-async function boot(panelOptions = {}) {
-  const logs = captureConsole();
-  const panel = await new FakePanel(panelOptions).start();
-  setBridgeEnv({ HOSTNAME: panel.hostname });
-  const clock = useFakeClock();
-  const { keepAlive } = loadBridge().load('keep_alive_worker.js');
-  return { panel, logs, clock, keepAlive };
-}
 
 describe('keepAlive() cadence (spec/status_machine.json)', () => {
   it.each(withTitle(spec.keep_alive_cadence))('$title', async ({ advance_ms, expected_requests }) => {

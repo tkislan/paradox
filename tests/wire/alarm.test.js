@@ -1,38 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { ARMED, DISARMED, FakePanel } from '../mock_paradox.js';
-import {
-  captureConsole, loadBridge, loadSpec, setBridgeEnv, settle, specText, useFakeClock, waitFor, withTitle,
-} from '../support.js';
-
-const spec = loadSpec('status_pages');
-
-const COMMANDS = ['arm', 'disarm'];
-const requestRows = (...operations) => spec.requests.filter((row) => operations.includes(row.operation));
-
-const html = (body, status = 200, headers = {}) => ({ status, headers: { 'Content-Type': 'text/html', ...headers }, body });
-
-async function rejection(promise) {
-  try {
-    await promise;
-  } catch (error) {
-    return error;
-  }
-  throw new Error('expected the promise to reject');
-}
-
-function track(promise) {
-  const outcome = { state: 'pending' };
-  promise.then(() => { outcome.state = 'resolved'; }, () => { outcome.state = 'rejected'; });
-  return outcome;
-}
-
-async function startBridge(panelOptions) {
-  captureConsole();
-  const panel = await new FakePanel(panelOptions).start();
-  setBridgeEnv({ HOSTNAME: panel.hostname });
-  const { load } = loadBridge();
-  return { panel, ...load('api/alarm.js'), getStatus: load('api/status.js').getStatus };
-}
+import { ARMED, DISARMED } from '../mock_paradox.js';
+import { settle, specText, useFakeClock, waitFor, withTitle } from '../support.js';
+import { rejection, track } from '../helpers/outcomes.js';
+import { html } from '../helpers/responses.js';
+import { COMMANDS, requestRows, spec, startBridge } from '../helpers/alarm.js';
 
 describe('requests as sent', () => {
   it.each(withTitle(requestRows('arm', 'disarm')))('$title sends exactly $request, with only the HTTP client default headers', async ({ operation, request, absent_headers }) => {

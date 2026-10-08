@@ -1,12 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  captureConsole, loadBridge, loadSpec, rowTitle, settle, specText, spyProcessExit, useFakeClock, waitFor,
+  captureConsole, cases, loadSpec, settle, specText, spyProcessExit, useFakeClock, waitFor,
 } from '../support.js';
+import { loadUtil, scripted } from '../helpers/util.js';
 
 const spec = loadSpec('util');
-
-const loadUtil = () => loadBridge().load('util.js');
-const cases = (rows) => rows.map((row) => [rowTitle(row), row]);
 
 describe('sleep', () => {
   it('resolves with undefined exactly when the delay has elapsed', async () => {
@@ -223,18 +221,6 @@ describe('iterateTuples', () => {
 });
 
 describe('retry', () => {
-  function scripted(attempts) {
-    const f = async () => {
-      const attempt = attempts[f.calls];
-      f.calls += 1;
-      if (!attempt) throw new Error('script exhausted');
-      if ('throws' in attempt) throw new Error(attempt.throws);
-      return attempt.returns;
-    };
-    f.calls = 0;
-    return f;
-  }
-
   it.each(cases(spec.retry))('%s', async (_title, { max_retries: max, wait_ms: wait, attempts, expected }) => {
     const { retry } = loadUtil();
     const f = scripted(attempts);
