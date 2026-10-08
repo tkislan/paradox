@@ -68,6 +68,12 @@ export function expectRequestCounts(panel, counts) {
   expect(panel.requests).toHaveLength(Object.values(counts).reduce((sum, n) => sum + n, 0));
 }
 
+export async function runLoginScenario(row) {
+  const bridge = await startBridge({ responses: row.panel });
+
+  await expectScenario(row, bridge);
+}
+
 export async function expectScenario(row, { panel, output, login }) {
   const outcome = await outcomeOf(login());
 

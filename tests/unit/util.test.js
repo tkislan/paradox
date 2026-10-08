@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   captureConsole, cases, loadSpec, settle, specText, spyProcessExit, useFakeClock, waitFor,
 } from '../support.js';
-import { loadUtil, scripted } from '../helpers/util.js';
+import { expectDeepArrayEqual, expectJsValue, expectTuples, loadUtil, scripted } from '../helpers/util.js';
 
 const spec = loadSpec('util');
 
@@ -48,11 +48,7 @@ describe('sleep', () => {
 });
 
 describe('deepArrayEqual', () => {
-  it.each(cases(spec.deepArrayEqual))('%s', (_title, { a, b, expected }) => {
-    const { deepArrayEqual } = loadUtil();
-
-    expect(deepArrayEqual(a, b)).toBe(expected);
-  });
+  it.each(cases(spec.deepArrayEqual))('%s', (_title, row) => expectDeepArrayEqual(row));
 
   it('treats undefined like a missing array, in either position and in both', () => {
     const { deepArrayEqual } = loadUtil();
@@ -69,31 +65,10 @@ describe('deepArrayEqual', () => {
     expect(deepArrayEqual([1, undefined], [1])).toBe(false);
     expect(deepArrayEqual([1], [1, undefined])).toBe(false);
   });
-
-  it('KNOWN BUG KB-6: nested arrays are equal only when they are the very same object', () => {
-    const { deepArrayEqual } = loadUtil();
-    const inner = [1];
-
-    expect(deepArrayEqual([inner], [inner])).toBe(true);
-    expect(deepArrayEqual([inner], [[1]])).toBe(false);
-  });
-
-  it('KNOWN BUG KB-6: NaN elements are never equal, not even in the same array', () => {
-    const { deepArrayEqual } = loadUtil();
-    const withNaN = [1, NaN];
-
-    expect(deepArrayEqual(withNaN, withNaN)).toBe(false);
-    expect(deepArrayEqual([NaN], [NaN])).toBe(false);
-  });
 });
 
 describe('getJsValue', () => {
-  it.each(cases(spec.getJsValue))('%s', (_title, { content, pattern, expected }) => {
-    const { getJsValue } = loadUtil();
-
-    // toEqual, not toStrictEqual: the array is built in the vm's own realm.
-    expect(getJsValue(specText(content), new RegExp(pattern))).toEqual(expected);
-  });
+  it.each(cases(spec.getJsValue))('%s', (_title, row) => expectJsValue(row));
 
   describe('when the regexp does not match', () => {
     it.each(cases(spec.getJsValue_errors))('%s', (_title, { content, pattern, error }) => {
@@ -166,17 +141,6 @@ describe('getJsValue', () => {
     expect(getJsValue('x', /(y)?x/)).toBeUndefined();
   });
 
-  it('KNOWN BUG KB-23: `new Array(7)` is seven empty slots, not [7]', () => {
-    const { getJsValue } = loadUtil();
-
-    const value = getJsValue('x=new Array(7)', /x=(.*)/);
-
-    expect(value).toHaveLength(7);
-    expect(Object.keys(value)).toEqual([]);
-    expect(getJsValue('x=new Array("7")', /x=(.*)/)).toEqual(['7']);
-    expect(getJsValue('x=new Array(7,8)', /x=(.*)/)).toEqual([7, 8]);
-  });
-
   it('a global regexp resumes from its lastIndex, so repeated calls walk through the matches', () => {
     captureConsole();
     const { getJsValue } = loadUtil();
@@ -192,11 +156,7 @@ describe('getJsValue', () => {
 });
 
 describe('iterateTuples', () => {
-  it.each(cases(spec.iterateTuples))('%s', (_title, { list, expected }) => {
-    const { iterateTuples } = loadUtil();
-
-    expect(Array.from(iterateTuples(list))).toEqual(expected);
-  });
+  it.each(cases(spec.iterateTuples))('%s', (_title, row) => expectTuples(row));
 
   it.each(cases(spec.iterateTuples_errors))('rejects %s', (_title, { list, error }) => {
     const { iterateTuples } = loadUtil();
@@ -307,26 +267,6 @@ describe('retry', () => {
     await waitFor(() => f.mock.calls.length === 3, { message: 'the third attempt' });
     rejectAttempt[2](new Error('e3'));
     expect((await outcome).message).toBe('e3');
-  });
-
-  it('KNOWN BUG KB-5: retries run back to back, the wait time is never used', async () => {
-    useFakeClock();
-    const { retry } = loadUtil();
-    const pendingTimersAtCall = [];
-    const f = vi.fn(async () => {
-      pendingTimersAtCall.push(vi.getTimerCount());
-      if (f.mock.calls.length < 4) throw new Error('not yet');
-      return 'ok';
-    });
-    let result;
-    retry(10, 1000, f).then((value) => { result = value; });
-
-    // The fake clock never advances: a retry that slept 1000 ms between attempts could not finish.
-    await waitFor(() => result, { timeout: 500, message: 'retry to finish without any waiting' });
-
-    expect(result).toBe('ok');
-    expect(f).toHaveBeenCalledTimes(4);
-    expect(pendingTimersAtCall).toEqual([0, 0, 0, 0]);
   });
 });
 

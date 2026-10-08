@@ -183,12 +183,6 @@ export async function expectLoginFailure(ctx, stderrIncludes) {
   expect(ctx.broker.connects).toEqual([]);
 }
 
-export const POLL_FAILURES = [
-  { name: 'panel goes away', stderrIncludes: 'ECONNREFUSED', pollsReachingPanel: 0, panel: {}, breakPanel: (panel) => panel.stop() },
-  { name: 'panel answers HTTP 500', stderrIncludes: 'Request failed with status code 500', pollsReachingPanel: 1, panel: {}, breakPanel: (panel) => panel.respondWith('/statuslive.html', { status: 500, headers: HTML, body: 'busy' }) },
-  { name: 'session expires and the panel serves the login page', stderrIncludes: "Regex didn't match the value", pollsReachingPanel: 1, panel: { requireLogin: true }, breakPanel: (panel) => panel.expireSession() },
-];
-
 export const FAILURES = [
   {
     name: 'the panel rejects the login',

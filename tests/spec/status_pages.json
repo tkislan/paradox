@@ -1,5 +1,5 @@
 {
-  "_comment": "Pages and responses the Paradox panel gives to the bridge, and what src/api/status.js and src/api/alarm.js make of them. \"page\" / \"response.body\" is an inline string or {\"file\": \"<path relative to tests/>\"}. Result arrays: {\"empty_slots\": n} stands for a JavaScript new Array(n), n unset slots (a port may use a list of None). \"error\" is the exact message of the failure; messages other than the parse error come from the JavaScript HTTP client (axios 0.18) and only the fact of failing is portable. \"known_bug\" refers to the catalog in README.md;",
+  "_comment": "Pages and responses the Paradox panel gives to the bridge, and what src/api/status.js and src/api/alarm.js make of them. \"page\" / \"response.body\" is an inline string or {\"file\": \"<path relative to tests/>\"}. Result arrays: {\"empty_slots\": n} stands for a JavaScript new Array(n), n unset slots (a port may use a list of None). \"error\" is the exact message of the failure; messages other than the parse error come from the JavaScript HTTP client (axios 0.18) and only the fact of failing is portable. Rows with a known_bug (catalog in README.md) are in known_bugs/status_pages.json, in the same groups.",
   "get_status": [
     {
       "name": "armed panel capture",
@@ -52,53 +52,6 @@
       "name": "trailing comma is accepted",
       "page": "tbl_statuszone = new Array(1,2,);var stayd=\"0\";tbl_useraccess = new Array(1,0,);",
       "expected": { "statuszone": [1, 2], "useraccess": [1, 0], "alarms": [0] }
-    },
-    {
-      "name": "a single-value zone table becomes that many empty slots",
-      "page": "tbl_statuszone = new Array(7);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
-      "expected": {
-        "statuszone": { "empty_slots": 7 },
-        "useraccess": [1, 0],
-        "alarms": [0]
-      },
-      "known_bug": "KB-23",
-      "note": "The value is eval-ed as new Array(7), the JavaScript length constructor, not as a one-element list."
-    },
-    {
-      "name": "a single-value useraccess table becomes that many empty slots",
-      "page": "tbl_statuszone = new Array(0,0);var stayd=\"0\";tbl_useraccess = new Array(2);",
-      "expected": {
-        "statuszone": [0, 0],
-        "useraccess": { "empty_slots": 2 },
-        "alarms": [0]
-      },
-      "known_bug": "KB-23",
-      "note": "A panel with a one-entry useraccess table would therefore read as \"armed state unknown\"."
-    },
-    {
-      "name": "a single zero value becomes an empty list",
-      "page": "tbl_statuszone = new Array(0);var stayd=\"0\";tbl_useraccess = new Array(0);",
-      "expected": { "statuszone": [], "useraccess": [], "alarms": [0] },
-      "known_bug": "KB-23"
-    },
-    {
-      "name": "a single value of 2^32 or more fails with the engine error instead of the regex error",
-      "page": "tbl_statuszone = new Array(4294967296);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
-      "expected": { "error": "Invalid array length" },
-      "known_bug": "KB-23"
-    },
-    {
-      "name": "values with a leading zero are read as octal",
-      "page": "tbl_statuszone = new Array(010,011);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
-      "expected": { "statuszone": [8, 9], "useraccess": [1, 0], "alarms": [0] },
-      "known_bug": "KB-39",
-      "note": "The value is eval-ed as JavaScript source, where 010 is octal 8; a port that parses decimal integers reads 10 and 11. The panel is not known to pad numbers with zeros."
-    },
-    {
-      "name": "tbl_alarmes entries are ignored and alarms is always [0]",
-      "page": "tbl_statuszone = new Array(1,0);var stayd=\"0\";tbl_useraccess = new Array(2,0);tbl_alarmes = new Array(\"3\",\"4\");tbl_troubles = new Array(\"16\",\"19\");",
-      "expected": { "statuszone": [1, 0], "useraccess": [2, 0], "alarms": [0] },
-      "known_bug": "KB-15"
     },
     {
       "name": "tables are found anywhere in the page",
@@ -351,13 +304,6 @@
       "name": "index page instead of the status page is an error",
       "page": { "file": "data/index_page.html" },
       "expected": { "error": "Regex didn't match the value" }
-    },
-    {
-      "name": "login page served after the session expired is an error",
-      "page": { "file": "data/login_page.html" },
-      "expected": { "error": "Regex didn't match the value" },
-      "known_bug": "KB-12",
-      "note": "The panel answers an expired session with HTTP 200 and the login page; the only symptom is the parse error."
     }
   ],
   "requests": [
@@ -365,27 +311,6 @@
       "operation": "getStatus",
       "request": "GET /statuslive.html",
       "absent_headers": ["referer", "cookie", "authorization"]
-    },
-    {
-      "operation": "sendKeepAlive",
-      "request": "GET /keep_alive.html?msgid=1",
-      "known_bug": "KB-9",
-      "absent_headers": ["referer", "cookie", "authorization"],
-      "note": "The random cache-buster the code computes is dropped by the HTTP client (null parameter value) and never reaches the wire."
-    },
-    {
-      "operation": "arm",
-      "request": "GET /statuslive.html?area=00&value=r",
-      "known_bug": "KB-18",
-      "absent_headers": ["referer", "cookie", "authorization"],
-      "note": "area is always 00 although the panel has two areas."
-    },
-    {
-      "operation": "disarm",
-      "request": "GET /statuslive.html?area=00&value=d",
-      "known_bug": "KB-18",
-      "absent_headers": ["referer", "cookie", "authorization"],
-      "note": "area is always 00 although the panel has two areas."
     }
   ],
   "body_ignoring_responses": [
@@ -406,21 +331,6 @@
         "body": { "file": "data/unarmed.html" }
       },
       "expected": { "result": null }
-    },
-    {
-      "name": "unrelated text is success",
-      "response": { "status": 200, "body": "command refused" },
-      "expected": { "result": null },
-      "known_bug": "KB-14"
-    },
-    {
-      "name": "the login page (expired session) is success",
-      "response": {
-        "status": 200,
-        "body": { "file": "data/login_page.html" }
-      },
-      "expected": { "result": null },
-      "known_bug": "KB-14"
     },
     {
       "name": "HTTP 500 is a failure",

@@ -1,0 +1,115 @@
+{
+  "_comment": "Rows of ../config.json that pin a defect of the current code on purpose (known_bug: the catalog id in tests/README.md), moved here unchanged: the same groups and the same row format, which the comment of that file describes. Group missing: valid_env (defined in ../config.json) minus the variables in unset must make loading the config throw an Error with exactly this message (KB-20: it is misspelled). A port does not have to reproduce any of them.",
+  "missing": [
+    {
+      "name": "HOSTNAME is not set",
+      "unset": ["HOSTNAME"],
+      "error": "Missing enviromnent variable: HOSTNAME",
+      "known_bug": "KB-20"
+    },
+    {
+      "name": "USERNAME is not set",
+      "unset": ["USERNAME"],
+      "error": "Missing enviromnent variable: USERNAME",
+      "known_bug": "KB-20"
+    },
+    {
+      "name": "PASSWORD is not set",
+      "unset": ["PASSWORD"],
+      "error": "Missing enviromnent variable: PASSWORD",
+      "known_bug": "KB-20"
+    },
+    {
+      "name": "PORT is not set",
+      "unset": ["PORT"],
+      "error": "Missing enviromnent variable: PORT",
+      "known_bug": "KB-20"
+    },
+    {
+      "name": "MQTT_HOSTNAME is not set",
+      "unset": ["MQTT_HOSTNAME"],
+      "error": "Missing enviromnent variable: MQTT_HOSTNAME",
+      "known_bug": "KB-20"
+    },
+    {
+      "name": "MQTT_PORT is not set",
+      "unset": ["MQTT_PORT"],
+      "error": "Missing enviromnent variable: MQTT_PORT",
+      "known_bug": "KB-20"
+    },
+    {
+      "name": "MQTT_USERNAME is not set",
+      "unset": ["MQTT_USERNAME"],
+      "error": "Missing enviromnent variable: MQTT_USERNAME",
+      "known_bug": "KB-20"
+    },
+    {
+      "name": "MQTT_PASSWORD is not set",
+      "unset": ["MQTT_PASSWORD"],
+      "error": "Missing enviromnent variable: MQTT_PASSWORD",
+      "known_bug": "KB-20"
+    },
+    {
+      "name": "with several missing, the first in declaration order is reported (USERNAME before PASSWORD)",
+      "unset": ["PASSWORD", "USERNAME"],
+      "error": "Missing enviromnent variable: USERNAME",
+      "known_bug": "KB-20"
+    },
+    {
+      "name": "with several missing, the first in declaration order is reported (MQTT_PORT before MQTT_PASSWORD)",
+      "unset": ["MQTT_PASSWORD", "MQTT_PORT"],
+      "error": "Missing enviromnent variable: MQTT_PORT",
+      "known_bug": "KB-20"
+    },
+    {
+      "name": "with several missing, the first in declaration order is reported (HOSTNAME before USERNAME)",
+      "unset": ["USERNAME", "HOSTNAME"],
+      "error": "Missing enviromnent variable: HOSTNAME",
+      "known_bug": "KB-20",
+      "note": "Only the order of the report is pinned; a port may name every missing variable at once."
+    },
+    {
+      "name": "with several missing, the first in declaration order is reported (PASSWORD before PORT)",
+      "unset": ["PORT", "PASSWORD"],
+      "error": "Missing enviromnent variable: PASSWORD",
+      "known_bug": "KB-20",
+      "note": "Only the order of the report is pinned; a port may name every missing variable at once."
+    },
+    {
+      "name": "with several missing, the first in declaration order is reported (PORT before MQTT_HOSTNAME)",
+      "unset": ["MQTT_HOSTNAME", "PORT"],
+      "error": "Missing enviromnent variable: PORT",
+      "known_bug": "KB-20",
+      "note": "Only the order of the report is pinned; a port may name every missing variable at once."
+    },
+    {
+      "name": "with several missing, the first in declaration order is reported (MQTT_HOSTNAME before MQTT_PORT)",
+      "unset": ["MQTT_PORT", "MQTT_HOSTNAME"],
+      "error": "Missing enviromnent variable: MQTT_HOSTNAME",
+      "known_bug": "KB-20",
+      "note": "Only the order of the report is pinned; a port may name every missing variable at once."
+    },
+    {
+      "name": "with several missing, the first in declaration order is reported (MQTT_PORT before MQTT_USERNAME)",
+      "unset": ["MQTT_USERNAME", "MQTT_PORT"],
+      "error": "Missing enviromnent variable: MQTT_PORT",
+      "known_bug": "KB-20",
+      "note": "Only the order of the report is pinned; a port may name every missing variable at once."
+    },
+    {
+      "name": "with several missing, the first in declaration order is reported (MQTT_USERNAME before MQTT_PASSWORD)",
+      "unset": ["MQTT_PASSWORD", "MQTT_USERNAME"],
+      "error": "Missing enviromnent variable: MQTT_USERNAME",
+      "known_bug": "KB-20",
+      "note": "Only the order of the report is pinned; a port may name every missing variable at once."
+    },
+    {
+      "name": "nothing set: HOSTNAME is reported",
+      "unset": [
+        "HOSTNAME", "USERNAME", "PASSWORD", "PORT", "MQTT_HOSTNAME", "MQTT_PORT", "MQTT_USERNAME", "MQTT_PASSWORD"
+      ],
+      "error": "Missing enviromnent variable: HOSTNAME",
+      "known_bug": "KB-20"
+    }
+  ]
+}
