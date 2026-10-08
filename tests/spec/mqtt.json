@@ -1,5 +1,5 @@
 {
-  "_comment": "MQTT link behavior as data. 'credentials': what the broker receives in CONNECT (or how connecting fails) for MQTT_USERNAME/MQTT_PASSWORD values, because mqtt_link.js pastes them unescaped into mqtt://USER:PASS@HOST:PORT; null means the field is absent from the packet; expected_connect_error.after_ms is how long the failure takes (fake clock). expected_dialed is the host and port the bridge dials instead of the configured broker when the URL breaks (the username survives as the host name). Identical on Node 10.14 and Node 24. 'connack_refusals': a CONNACK with a non-zero return code makes the connection attempt fail with this error. 'commands': MQTT messages received by the bridge (delivered whether or not it subscribed to the topic) and the panel requests they cause; expected_panel_requests is an unordered list of request lines. 'broker_ports': what the bridge dials for a given MQTT_PORT string (the host is always MQTT_HOSTNAME); unparsable values silently become the MQTT default 1883. 'broker_hosts': what the bridge dials for a given MQTT_HOSTNAME/MQTT_PORT pair, because the host is pasted unescaped into the same URL.",
+  "_comment": "MQTT link behavior as data. The tests run the link against real Mosquitto brokers, where a failed login is CONNACK 5 ('Connection refused: Not authorized'), never 4. 'credentials': mqtt_link.js pastes MQTT_USERNAME/MQTT_PASSWORD unescaped into mqtt://USER:PASS@HOST:PORT. expected_broker_username/expected_broker_password are what the broker receives in CONNECT (null: the packet has no password field); the outcome against a broker that has an account with exactly those credentials is that the link connects, unless expected_login is 'refused' (a broker that checks passwords, as Mosquitto does, cannot authenticate a username that arrives without one). expected_connect_error: the failure never reaches the configured broker; after_ms is how long it takes (fake clock) and expected_dialed is the host and port the bridge dials instead of the broker when the URL breaks (the username survives as the host name). Identical on Node 10.14 and Node 24. 'connack_refusals': a CONNACK with a non-zero return code makes the connection attempt fail with this error (forged in the tests: Mosquitto 2.1 answers a failed login with 5). 'commands': MQTT messages received by the bridge and the panel requests they cause; expected_panel_requests is an unordered list of request lines. The bridge subscribes to paradox/command/arm and paradox/command/disarm only, so a real broker never delivers a row with delivered_by_broker false: such rows pin the bridge's own topic matching and are delivered by hand. 'broker_ports': what the bridge dials for a given MQTT_PORT string (the host is always MQTT_HOSTNAME); unparsable values silently become the MQTT default 1883. 'broker_hosts': what the bridge dials for a given MQTT_HOSTNAME/MQTT_PORT pair, because the host is pasted unescaped into the same URL.",
   "credentials": [
     {
       "name": "plain username and password",
@@ -126,8 +126,9 @@
       "password": "",
       "expected_broker_username": "user:",
       "expected_broker_password": null,
+      "expected_login": "refused",
       "known_bug": "KB-8",
-      "note": "config.js accepts an empty value; the broker sees the trailing ':' as part of the username and no password at all"
+      "note": "config.js accepts an empty value; the broker sees the trailing ':' as part of the username and no password at all, so it cannot authenticate any account"
     },
     {
       "name": "empty username",
@@ -135,8 +136,9 @@
       "password": "pass",
       "expected_broker_username": ":pass",
       "expected_broker_password": null,
+      "expected_login": "refused",
       "known_bug": "KB-8",
-      "note": "the whole 'user:pass' pair is sent as the username"
+      "note": "the whole 'user:pass' pair is sent as the username, with no password, so a broker cannot authenticate any account"
     },
     {
       "name": "empty username and empty password",
@@ -144,7 +146,9 @@
       "password": "",
       "expected_broker_username": ":",
       "expected_broker_password": null,
-      "known_bug": "KB-8"
+      "expected_login": "refused",
+      "known_bug": "KB-8",
+      "note": "the pair ':' is sent as the username, with no password, so a broker cannot authenticate any account"
     },
     {
       "name": "percent-encoded '@' in the password is decoded",
@@ -517,13 +521,15 @@
       "name": "return code 4 (bad username or password)",
       "return_code": 4,
       "expected_error_code": 4,
-      "expected_error_message": "Connection refused: Bad username or password"
+      "expected_error_message": "Connection refused: Bad username or password",
+      "note": "Mosquitto 2.1 answers a failed login with 5 instead, so the tests forge this code"
     },
     {
       "name": "return code 5 (not authorized)",
       "return_code": 5,
       "expected_error_code": 5,
-      "expected_error_message": "Connection refused: Not authorized"
+      "expected_error_message": "Connection refused: Not authorized",
+      "note": "what Mosquitto answers to a failed login, whether the user is unknown or only the password is wrong"
     },
     {
       "name": "reserved return code 6",
@@ -678,7 +684,8 @@
           "payload": "ON"
         }
       ],
-      "expected_panel_requests": []
+      "expected_panel_requests": [],
+      "delivered_by_broker": false
     },
     {
       "name": "topic must match exactly: extra level",
@@ -688,7 +695,8 @@
           "payload": "ON"
         }
       ],
-      "expected_panel_requests": []
+      "expected_panel_requests": [],
+      "delivered_by_broker": false
     },
     {
       "name": "topic must match exactly: trailing slash",
@@ -698,7 +706,8 @@
           "payload": "ON"
         }
       ],
-      "expected_panel_requests": []
+      "expected_panel_requests": [],
+      "delivered_by_broker": false
     },
     {
       "name": "topic must match exactly: other prefix",
@@ -708,7 +717,8 @@
           "payload": "ON"
         }
       ],
-      "expected_panel_requests": []
+      "expected_panel_requests": [],
+      "delivered_by_broker": false
     },
     {
       "name": "unknown command topic is ignored",
@@ -718,7 +728,8 @@
           "payload": "ON"
         }
       ],
-      "expected_panel_requests": []
+      "expected_panel_requests": [],
+      "delivered_by_broker": false
     },
     {
       "name": "the bridge's own status topic is ignored",
@@ -728,7 +739,8 @@
           "payload": "ON"
         }
       ],
-      "expected_panel_requests": []
+      "expected_panel_requests": [],
+      "delivered_by_broker": false
     }
   ]
 }

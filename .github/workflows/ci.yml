@@ -23,7 +23,8 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      # Compiles src/, runs the suite with the coverage thresholds.
+      # Starts the Mosquitto containers from tests/docker-compose.yml, runs the suite with coverage
+      # thresholds, and removes the containers.
       - run: npm test
 
   image:

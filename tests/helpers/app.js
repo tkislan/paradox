@@ -1,13 +1,20 @@
 import http from 'node:http';
+import { createRequire } from 'node:module';
 import net from 'node:net';
-import { expect } from 'vitest';
-import { FakeBroker } from '../mock_mqtt.js';
+import path from 'node:path';
+import mqttPacket from 'mqtt-packet';
+import { expect, vi } from 'vitest';
 import { FakePanel } from '../mock_paradox.js';
+import { leaseBroker } from '../mosquitto.js';
 import {
-  captureConsole, isolateProcessListeners, loadBridge, onCleanup, reservePort, setBridgeEnv, settle, specText,
-  spyProcessExit, useFakeClock, waitFor,
+  BUILD_DIR, captureConsole, isolateProcessListeners, loadBridge, onCleanup, reservePort, setBridgeEnv, settle,
+  specText, spyProcessExit, useFakeClock, waitFor,
 } from '../support.js';
-import { FAULTS, MQTT_PASSWORD, MQTT_USERNAME, QUIET_MS, SIGNALS, WAIT_INTERVAL_MS, login } from '../fixtures/app.js';
+import {
+  FAULTS, QUIET_MS, REACH_TIMEOUT_MS, READY_TIMEOUT_MS, SIGNALS, WAIT_INTERVAL_MS, login,
+} from '../fixtures/app.js';
+
+vi.setConfig({ testTimeout: 90000 });
 
 const faultResponse = ({ kind, page }) => {
   if (kind !== 'page') return FAULTS[kind];
@@ -50,14 +57,36 @@ export function captureProcessEvent(event, seen = []) {
 }
 
 /**
- * Everything one scenario needs: fake panel and broker, fake clock, silenced console, recorded
- * process.exit. `load()` starts the bridge (app.js runs at import time).
+ * The bridge never ends its MQTT client (KB-33) and the mocked process.exit lets it live on, so the clients it creates are
+ * collected to be ended by the test. mqtt_link.js calls `mqtt.connect` through the module object, which makes this possible.
  */
-export async function createBridge({ panel: panelSpec = {}, broker: brokerSpec = {}, env = {} } = {}) {
+function collectBridgeMqttClients() {
+  const mqtt = createRequire(path.join(BUILD_DIR, 'app.js'))('mqtt');
+  const connect = mqtt.connect;
+  const clients = [];
+  mqtt.connect = function connectAndRemember(...args) {
+    const client = connect.apply(this, args);
+    clients.push(client);
+    return client;
+  };
+  onCleanup(() => { mqtt.connect = connect; });
+  return clients;
+}
+
+/**
+ * Everything one scenario needs: fake panel, a leased Mosquitto, fake clock, silenced console, recorded
+ * process.exit. `load()` starts the bridge (app.js runs at import time). `relay` routes the bridge through a TCP relay
+ * in front of the broker, for what Mosquitto cannot do itself: a broker that is gone or never answers, bytes a broker
+ * would never send.
+ */
+export async function createBridge({ panel: panelSpec = {}, broker: brokerSpec = {}, env = {}, relay: relayed = false } = {}) {
+  // Before the fake clock: the lease reads the broker log from "now", and fake time moves on.
+  const broker = await leaseBroker();
   const logs = captureConsole();
   const exit = spyProcessExit();
   isolateProcessListeners();
   const clock = useFakeClock();
+  const mqttClients = collectBridgeMqttClients();
 
   const panel = new FakePanel({
     sessionValue: login.session,
@@ -70,12 +99,11 @@ export async function createBridge({ panel: panelSpec = {}, broker: brokerSpec =
   await panel.start();
   (panelSpec.faults ?? []).forEach((fault) => addFault(panel, fault));
 
-  const broker = new FakeBroker({
-    credentials: brokerSpec.accept_credentials === false ? { username: 'someone', password: 'else' } : undefined,
-    silent: brokerSpec.silent,
-  });
-  await broker.start();
-  Object.entries(brokerSpec.retained ?? {}).forEach(([topic, payload]) => broker.retained.set(topic, payload));
+  for (const [topic, payload] of Object.entries(brokerSpec.retained ?? {})) await broker.publish(topic, payload, { retain: true });
+  const relay = relayed ? await broker.proxy() : null;
+  const connectPackets = relay ? relay.connects : [];
+  if (brokerSpec.silent) relay.blackhole();
+  if (brokerSpec.down) await relay.stop();
 
   const port = await reservePort();
   setBridgeEnv({
@@ -83,10 +111,10 @@ export async function createBridge({ panel: panelSpec = {}, broker: brokerSpec =
     USERNAME: login.username,
     PASSWORD: login.password,
     PORT: String(port),
-    MQTT_HOSTNAME: broker.hostname,
-    MQTT_PORT: String(brokerSpec.down ? await reservePort() : broker.port),
-    MQTT_USERNAME,
-    MQTT_PASSWORD,
+    MQTT_HOSTNAME: (relay ?? broker).hostname,
+    MQTT_PORT: String((relay ?? broker).port),
+    MQTT_USERNAME: broker.credentials.username,
+    MQTT_PASSWORD: brokerSpec.accept_credentials === false ? `not-${broker.credentials.password}` : broker.credentials.password,
     ...env,
   });
 
@@ -98,17 +126,26 @@ export async function createBridge({ panel: panelSpec = {}, broker: brokerSpec =
   const world = {
     panel,
     broker,
+    relay,
+    connectPackets,
     port,
     clock,
     logs,
     exitCodes,
-    seen: { published: 0, requests: 0, exits: 0, errors: 0 },
+    seen: { published: 0, brokerPublishes: 0, requests: 0, exits: 0, errors: 0 },
     lastRest: null,
     hungRequests: (panelSpec.faults ?? []).some((fault) => fault.kind === 'hang'),
     load: () => loadBridge().load('app.js'),
     signal: (name) => bridgeHandlers(name).forEach((handler) => handler(name)),
     rest: (call) => request(port, call),
-    awaitRestServer: () => waitFor(() => canConnect(port), { interval: WAIT_INTERVAL_MS, message: 'the REST server to listen' }),
+    // CONNECT packets sent to the broker: Mosquitto answers every one (CONNACK 5 for a failed login, which its log
+    // does not list as a connect), a relay that does not forward has to count them itself.
+    connectCount: () => (relay ? connectPackets.length : broker.connacks.length),
+    // The REST port opens after the MQTT link is created, the SUBSCRIBEs may still be on their way to the broker.
+    awaitReady: async () => {
+      await waitFor(() => canConnect(port), { timeout: READY_TIMEOUT_MS, interval: WAIT_INTERVAL_MS, message: 'the REST server to listen' });
+      await waitFor(() => broker.subscriptions.length >= 2, { timeout: READY_TIMEOUT_MS, message: 'the broker to see both subscriptions' });
+    },
   };
 
   // The bridge's own shutdown path stops its timers and closes the REST server, which a mocked
@@ -127,16 +164,21 @@ export async function createBridge({ panel: panelSpec = {}, broker: brokerSpec =
         .then(() => waitFor(() => exitCodes().length > exitsBefore, { interval: 1, message: 'the shutdown to finish' }))
         .catch(() => {});
     }
-    // A connected MQTT client calls process.exit when the broker goes away; that must land on the spy
-    // and the fake clock, not on a real exit or a real reconnect timer after the test.
-    const connected = broker.clients.size > 0 && broker.subscriptions.length > 0;
-    const exitsBefore = exitCodes().length;
-    await broker.stop();
-    if (connected) await waitFor(() => exitCodes().length > exitsBefore, { interval: 1, timeout: 500 }).catch(() => {});
+    // Left alone the client stays subscribed on the leased instance, or redials from a real timer once the fake clock is
+    // gone, into whatever a later test runs on that instance or port. A connected client calls process.exit when it
+    // closes: that must land on the spy, so this runs before the spy and the clock are restored.
+    await Promise.all(mqttClients.map((client) => new Promise((resolve) => {
+      // Only a live stream still has a 'close' to wait for.
+      if (client.connected) client.once('close', resolve);
+      else resolve();
+      client.end(true);
+    })));
   });
 
   return world;
 }
+
+const needsRelay = ({ broker = {}, steps = [] }) => Boolean(broker.silent || broker.down || steps.some((step) => step.mqtt_message));
 
 function restBody({ headers, text }) {
   return text !== '' && String(headers['content-type']).includes('json') ? JSON.parse(text) : text;
@@ -150,17 +192,16 @@ async function perform(world, step) {
   }
   if (step.panel_expire_session) world.panel.expireSession();
   if (step.panel_down) await world.panel.stop();
-  if (step.broker_drop_clients) world.broker.dropClients();
+  if (step.broker_drop_clients) await world.broker.kick(world.broker.credentials.username);
   if (step.mqtt_command) {
     const { topic, payload } = typeof step.mqtt_command === 'string'
       ? { topic: `paradox/command/${step.mqtt_command}`, payload: '' }
       : step.mqtt_command;
-    world.broker.publish(topic, payload);
+    await world.broker.publish(topic, payload);
   }
   if (step.mqtt_message) {
     const { topic, payload } = step.mqtt_message;
-    const packet = { cmd: 'publish', topic, payload: Buffer.from(payload), qos: 0, retain: false, dup: false };
-    world.broker.clients.forEach((client) => client.send(packet));
+    world.relay.inject(mqttPacket.generate({ cmd: 'publish', topic, payload: Buffer.from(payload), qos: 0, retain: false, dup: false }));
   }
   if (step.signal) world.signal(step.signal);
   world.lastRest = null;
@@ -182,25 +223,30 @@ async function expectOutcome(world, expected, { checkRequests = true, quiet = tr
   const wantRequestCounts = expected.panel_request_counts;
   const wantRequestTotal = wantRequestCounts ? Object.values(wantRequestCounts).reduce((a, b) => a + b, 0) : wantRequests.length;
   const wantExits = expected.process_exit ?? [];
+  const { broker } = world;
 
   const fresh = () => ({
-    published: world.broker.published.slice(world.seen.published),
+    published: broker.published.slice(world.seen.published),
     requests: world.panel.requestLines.slice(world.seen.requests),
     exits: world.exitCodes().slice(world.seen.exits),
     errors: world.logs.error.slice(world.seen.errors),
   });
+  // The broker log is parsed on every access, so only what the expectation mentions is looked at while polling.
   const reached = () => {
     const now = fresh();
     return now.published.length >= wantPublished.length
       && (!checkRequests || now.requests.length >= wantRequestTotal)
       && now.exits.length >= wantExits.length
       && (expected.logged_error !== true || now.errors.length > 0)
-      && world.broker.connects.length >= (expected.broker_connects ?? 0)
-      && world.broker.subscriptions.length >= (expected.broker_subscriptions ?? []).length;
+      && (expected.broker_connects === undefined || world.connectCount() >= expected.broker_connects)
+      && (expected.broker_connacks === undefined || broker.connacks.length >= expected.broker_connacks.length)
+      && (expected.broker_subscriptions === undefined || broker.subscriptions.length >= expected.broker_subscriptions.length);
   };
   // On a timeout the comparison below reports what is missing, which beats a bare timeout error.
-  await waitFor(reached, { timeout: 1500, interval: WAIT_INTERVAL_MS }).catch(() => {});
+  await waitFor(reached, { timeout: REACH_TIMEOUT_MS, interval: WAIT_INTERVAL_MS }).catch(() => {});
   if (quiet) await settle(QUIET_MS);
+  // The broker's log lags its connections; this is what makes "the broker saw / published nothing more" checkable.
+  await broker.syncLog();
 
   const now = fresh();
   const actual = {
@@ -216,17 +262,31 @@ async function expectOutcome(world, expected, { checkRequests = true, quiet = tr
     actual.panel_requests = anyOrder ? [...now.requests].sort() : now.requests;
     wanted.panel_requests = anyOrder ? [...wantRequests].sort() : wantRequests;
   }
+  // The broker's own account of what the bridge sent, independent of the paradox/# observer: a PUBLISH on any other topic
+  // shows up here, and QoS, retain flag and length are what the broker received.
+  const sent = broker.clientPublishes.slice(world.seen.brokerPublishes);
+  actual.broker_log_publishes = sent;
+  wanted.broker_log_publishes = wantPublished.map(({ topic, payload, retain }) => ({ topic, qos: 0, retain, bytes: Buffer.byteLength(payload) }));
   if ('logged_error' in expected) {
     actual.logged_error = now.errors.length > 0;
     wanted.logged_error = expected.logged_error;
   }
   if ('broker_connects' in expected) {
-    actual.broker_connects = world.broker.connects.length;
+    actual.broker_connects = world.connectCount();
     wanted.broker_connects = expected.broker_connects;
   }
+  if ('broker_connacks' in expected) {
+    actual.broker_connacks = broker.connacks;
+    wanted.broker_connacks = expected.broker_connacks;
+  }
   if ('broker_subscriptions' in expected) {
-    actual.broker_subscriptions = world.broker.subscriptions;
+    actual.broker_subscriptions = broker.subscriptions.map(({ topic }) => topic);
     wanted.broker_subscriptions = expected.broker_subscriptions;
+  }
+  if ('broker_retained' in expected) {
+    actual.broker_retained = {};
+    for (const topic of Object.keys(expected.broker_retained)) actual.broker_retained[topic] = await broker.retained(topic);
+    wanted.broker_retained = expected.broker_retained;
   }
   if ('rest_listening' in expected) {
     actual.rest_listening = await canConnect(world.port);
@@ -242,9 +302,19 @@ async function expectOutcome(world, expected, { checkRequests = true, quiet = tr
   expect(now.published.map(({ qos }) => qos)).toEqual(now.published.map(() => 0));
 
   world.seen.published += now.published.length;
+  world.seen.brokerPublishes += sent.length;
   world.seen.requests += now.requests.length;
   world.seen.exits += now.exits.length;
   world.seen.errors += now.errors.length;
+}
+
+/** What a client that subscribes after the scenario gets: the last message the bridge published on each retained topic. */
+async function expectRetainedState(broker) {
+  const lastRetained = {};
+  broker.published.filter(({ retain }) => retain).forEach(({ topic, payload }) => { lastRetained[topic] = payload; });
+  const actual = {};
+  for (const topic of Object.keys(lastRetained)) actual[topic] = await broker.retained(topic);
+  expect(actual).toEqual(lastRetained);
 }
 
 export async function runScenario(row) {
@@ -253,11 +323,11 @@ export async function runScenario(row) {
   // Also covers rejections raised while the scenario is being torn down.
   onCleanup(() => expect(unhandled).toEqual([]));
   captureProcessEvent('unhandledRejection', unhandled);
-  const world = await createBridge(row);
+  const world = await createBridge({ ...row, relay: needsRelay(row) });
   const start = row.start ?? {};
 
   world.load();
-  if (start.ready !== false) await world.awaitRestServer();
+  if (start.ready !== false) await world.awaitReady();
   await expectOutcome(world, start.expect ?? {}, {
     checkRequests: start.expect?.panel_requests !== undefined,
     // Without startup expectations a stray startup message would show up in the first step anyway.
@@ -268,5 +338,6 @@ export async function runScenario(row) {
     await perform(world, step);
     await expectOutcome(world, step.expect ?? {});
   }
+  await expectRetainedState(world.broker);
   expect(unhandled).toEqual([]);
 }

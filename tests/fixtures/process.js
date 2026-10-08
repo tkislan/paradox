@@ -9,6 +9,12 @@ export const golden = {
 
 export const MQTT_CREDENTIALS = { username: 'mqttuser', password: 'mqttpass' };
 
+// Mosquitto answers every failed login with CONNACK 5; this is how mqtt.js words it:
+export const NOT_AUTHORIZED = 'Connection refused: Not authorized';
+
+// A CONNACK with return code 4 (bad credentials), as a broker would have to forge it on a live connection.
+export const FORGED_CONNACK_BAD_CREDENTIALS = [0x20, 0x02, 0x00, 0x04];
+
 const ENV_NAMES = ['HOSTNAME', 'USERNAME', 'PASSWORD', 'PORT', 'MQTT_HOSTNAME', 'MQTT_PORT', 'MQTT_USERNAME', 'MQTT_PASSWORD'];
 
 export const HTML = { 'Content-Type': 'text/html' };
@@ -24,6 +30,9 @@ const ZONE_SLOTS = 32;
 export const zones = (...open) => Array.from({ length: ZONE_SLOTS }, (_, i) => (open.includes(i) ? 1 : 0));
 
 const zoneCodes = (...codes) => Array.from({ length: ZONE_SLOTS }, (_, i) => codes[i] || 0);
+
+// Real processes and containers on a busy machine: generous limits cost nothing while everything is fast.
+export const TEST_TIMEOUT = 90000;
 
 // Scenario table: language-neutral, can move to spec/process.json when the Python suite needs it.
 export const MISSING_ENV = [
@@ -75,21 +84,6 @@ export const FIRST_POLL = [
   },
 ];
 
-export const CONNECT_TIMEOUT_ROWS = [
-  { name: 'nothing listening', nothingListening: true, connects: 0 },
-  { name: 'broker accepts TCP but never answers CONNECT', broker: { silent: true }, connects: 1 },
-];
-
-export const KEEP_ALIVE_ROWS = [
-  { name: 'healthy panel', failFirstKeepAlive: false },
-  { name: 'first keep-alive answered with HTTP 500', failFirstKeepAlive: true },
-];
-
-export const SIGNAL_ROWS = [
-  { name: 'SIGHUP', signal: 'SIGHUP', code: 129 },
-  { name: 'SIGINT', signal: 'SIGINT', code: 130 },
-];
-
 // Row "long username and password" of spec/crypto.json, so the panel accepts the login without the test hashing anything.
 export const login = {
   session: 'A86572A01074210A',
@@ -102,3 +96,13 @@ export const login = {
 export const mqtt = { username: 'mqtt-admin-account', password: 'mqtt-secret-horse' };
 
 export const panelAccepting = { sessionValue: login.session, credentials: { [login.session]: { u: login.u, p: login.p } } };
+
+export const KEEP_ALIVE_ROWS = [
+  { name: 'healthy panel', failFirstKeepAlive: false },
+  { name: 'first keep-alive answered with HTTP 500', failFirstKeepAlive: true },
+];
+
+export const SIGNAL_ROWS = [
+  { name: 'SIGHUP', signal: 'SIGHUP', code: 129 },
+  { name: 'SIGINT', signal: 'SIGINT', code: 130 },
+];

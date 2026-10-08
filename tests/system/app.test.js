@@ -1,7 +1,7 @@
 import net from 'node:net';
 import { describe, expect, it } from 'vitest';
 import { onCleanup, settle, waitFor, withTitle } from '../support.js';
-import { FAULTS, MQTT_PASSWORD, MQTT_USERNAME, QUIET_MS, login, spec } from '../fixtures/app.js';
+import { FAULTS, QUIET_MS, login, spec } from '../fixtures/app.js';
 import { canConnect, captureProcessEvent, createBridge, runScenario } from '../helpers/app.js';
 
 describe('scenarios', () => {
@@ -20,8 +20,9 @@ describe('missing environment variable', () => {
     expect(() => world.load()).toThrow(new Error(expected_error));
 
     await settle(QUIET_MS);
+    await world.broker.syncLog();
     expect(world.panel.requests).toEqual([]);
-    expect(world.broker.connects).toEqual([]);
+    expect(world.broker.events).toEqual([]);
     expect(world.exitCodes()).toEqual([]);
     expect(await canConnect(world.port)).toBe(false);
   });
@@ -34,48 +35,55 @@ describe('startup', () => {
     world.load();
     await waitFor(() => world.panel.requestsTo('/index.html').length === 1, { message: 'the login to reach the index page' });
     await settle(100);
+    await world.broker.syncLog();
 
-    expect(world.broker.connects).toEqual([]);
+    expect(world.broker.events).toEqual([]);
     expect(await canConnect(world.port)).toBe(false);
 
     await world.panel.stop();
     await waitFor(() => world.exitCodes().length === 1, { message: 'the failed login to end the process' });
+    await world.broker.syncLog();
     expect(world.exitCodes()).toEqual([1]);
-    expect(world.broker.connects).toEqual([]);
+    expect(world.broker.events).toEqual([]);
   });
 
   it('connects with the configured MQTT credentials as MQTT 3.1.1 with keepalive 60, a random client id, a clean session and no will, and subscribes with QoS 0', async () => {
     const world = await createBridge();
 
     world.load();
-    await world.awaitRestServer();
+    await world.awaitReady();
+    await world.broker.syncLog();
 
-    expect(world.broker.connects).toHaveLength(1);
-    expect(world.broker.connects[0]).toMatchObject({
-      username: MQTT_USERNAME,
-      password: MQTT_PASSWORD,
-      protocolId: 'MQTT',
-      protocolVersion: 4,
-      keepalive: 60,
+    // The broker never shows a password; the user bridge/secret only exists with that password, so CONNACK 0 is the evidence.
+    expect(world.broker.connects).toEqual([{
       clientId: expect.stringMatching(/^mqttjs_[0-9a-f]{8}$/),
+      protocolLevel: 4,
       clean: true,
-    });
-    expect(world.broker.connects[0].will).toBeUndefined();
-    const subscribes = world.broker.packets.filter((packet) => packet.cmd === 'subscribe');
-    expect(subscribes.map((packet) => packet.subscriptions)).toEqual([
+      keepalive: 60,
+      username: world.broker.credentials.username,
+      will: false,
+    }]);
+    expect(world.broker.connacks).toEqual([0]);
+    expect(world.broker.events.filter(({ type }) => type === 'subscribe').map(({ topics }) => topics)).toEqual([
       [{ topic: 'paradox/command/arm', qos: 0 }],
       [{ topic: 'paradox/command/disarm', qos: 0 }],
     ]);
   });
 
-  it('KNOWN BUG KB-8: an empty MQTT password makes the broker see the username with a trailing colon and no password', async () => {
-    const world = await createBridge({ env: { MQTT_PASSWORD: '' } });
+  it('KNOWN BUG KB-8: an empty MQTT password makes the bridge send the username with a trailing colon and no password, which the broker rejects with CONNACK 5', async () => {
+    const world = await createBridge({ relay: true, env: { MQTT_PASSWORD: '' } });
 
     world.load();
-    await world.awaitRestServer();
+    await waitFor(() => world.exitCodes().length === 1, { message: 'the rejected login to end the process' });
+    await world.broker.syncLog();
 
-    expect(world.broker.connects[0].username).toBe(`${MQTT_USERNAME}:`);
-    expect(world.broker.connects[0].password).toBeUndefined();
+    // Mosquitto does not log the username of a refused login, so the relay reports what it was sent.
+    expect(world.connectPackets).toHaveLength(1);
+    expect(world.connectPackets[0].username).toBe(`${world.broker.credentials.username}:`);
+    expect(world.connectPackets[0].password).toBeNull();
+    expect(world.broker.connacks).toEqual([5]);
+    expect(world.exitCodes()).toEqual([1]);
+    expect(await canConnect(world.port)).toBe(false);
   });
 
   it('KNOWN BUG KB-37: PORT already in use ends in an uncaught exception, not in the exit(1) handler', async () => {
@@ -112,7 +120,7 @@ describe('REST API', () => {
   it('serves /status as compact JSON with the keys in this order', async () => {
     const world = await createBridge({ panel: { statuszone: [5, 0, 1, ...new Array(29).fill(0)], useraccess: [2, 0] } });
     world.load();
-    await world.awaitRestServer();
+    await world.awaitReady();
 
     const response = await world.rest({ method: 'GET', path: '/status' });
 
@@ -124,7 +132,7 @@ describe('REST API', () => {
   it('answers /arm and /disarm with the plain text OK', async () => {
     const world = await createBridge();
     world.load();
-    await world.awaitRestServer();
+    await world.awaitReady();
 
     const response = await world.rest({ method: 'POST', path: '/arm' });
 
@@ -136,7 +144,7 @@ describe('REST API', () => {
   it('KNOWN BUG KB-19: any client of any network interface can disarm the alarm, the server listens on all interfaces', async () => {
     const world = await createBridge({ panel: { useraccess: [2, 0] } });
     world.load();
-    await world.awaitRestServer();
+    await world.awaitReady();
 
     // 127.0.0.2 is loopback but not 127.0.0.1: a server bound to 127.0.0.1 only would refuse it.
     const response = await world.rest({ method: 'POST', path: '/disarm', host: '127.0.0.2' });
@@ -150,7 +158,7 @@ describe('REST API', () => {
   it('KNOWN BUG KB-13: a request to a panel that never answers never completes, however long the bridge runs', async () => {
     const world = await createBridge();
     world.load();
-    await world.awaitRestServer();
+    await world.awaitReady();
     world.panel.respondWith('/statuslive.html', FAULTS.hang, { times: 1 });
     const abort = new AbortController();
     let finished = false;
@@ -172,20 +180,23 @@ describe('shutdown', () => {
   it('KNOWN BUG KB-33: shutdown sends no DISCONNECT and no offline message to the broker', async () => {
     const world = await createBridge();
     world.load();
-    await world.awaitRestServer();
+    await world.awaitReady();
 
     world.signal('SIGTERM');
     await waitFor(() => world.exitCodes().length === 1, { message: 'the shutdown to finish' });
     await settle(QUIET_MS);
+    await world.broker.syncLog();
 
-    expect(world.broker.packets.map((packet) => packet.cmd)).toEqual(['connect', 'subscribe', 'subscribe']);
+    // Everything the broker saw of the bridge: it connected and subscribed, and its connection is still open.
+    expect(world.broker.events.map(({ type }) => type)).toEqual(['connect', 'connack', 'subscribe', 'subscribe']);
     expect(world.broker.published).toEqual([]);
+    expect(await world.broker.retained('paradox/status/armed')).toBeNull();
   });
 
   it('waits for a request in flight, refuses new connections meanwhile, and only then exits', async () => {
     const world = await createBridge();
     world.load();
-    await world.awaitRestServer();
+    await world.awaitReady();
     world.panel.respondWith('/statuslive.html', FAULTS.hang, { times: 1 });
     const abort = new AbortController();
     const pending = world.rest({ method: 'GET', path: '/status', signal: abort.signal }).catch((error) => error.name);
@@ -207,7 +218,7 @@ describe('shutdown', () => {
     const unhandled = captureProcessEvent('unhandledRejection');
     const world = await createBridge();
     world.load();
-    await world.awaitRestServer();
+    await world.awaitReady();
     world.panel.respondWith('/statuslive.html', FAULTS.hang, { times: 1 });
     await world.clock.advance(1000);
     await waitFor(() => world.panel.requestsTo('/statuslive.html').length === 1, { message: 'the poll to reach the panel' });
@@ -226,12 +237,12 @@ describe('shutdown', () => {
 
 describe('MQTT link after startup', () => {
   it('KNOWN BUG KB-7: an MQTT error after connecting is logged by the stale pre-connect handler and also exits with 1', async () => {
-    const world = await createBridge();
+    const world = await createBridge({ relay: true });
     world.load();
-    await world.awaitRestServer();
+    await world.awaitReady();
 
     // A packet of the reserved type 15 makes the client's parser fail with an 'error' event.
-    world.broker.clients.forEach((client) => client.socket.write(Buffer.from([0xf0, 0x00])));
+    world.relay.inject([0xf0, 0x00]);
     await waitFor(() => world.exitCodes().length > 0, { message: 'the MQTT error to end the process' });
     await settle(QUIET_MS);
 

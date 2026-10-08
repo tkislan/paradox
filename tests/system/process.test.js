@@ -3,29 +3,36 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { leaseBroker } from '../mosquitto.js';
 import { onCleanup, reservePort, settle } from '../support.js';
 import {
-  ARM_LINE, CONNECT_TIMEOUT_ROWS, DISARM_LINE, FIRST_POLL, HTML, KEEP_ALIVE_ROWS, LOGIN_ATTEMPT_PATHS, MISSING_ENV,
-  SIGNAL_ROWS, golden, login, mqtt, zones,
+  ARM_LINE, DISARM_LINE, FIRST_POLL, FORGED_CONNACK_BAD_CREDENTIALS, HTML, KEEP_ALIVE_ROWS, LOGIN_ATTEMPT_PATHS,
+  MISSING_ENV, MQTT_CREDENTIALS, NOT_AUTHORIZED, SIGNAL_ROWS, TEST_TIMEOUT, golden, login, mqtt, zones,
 } from '../fixtures/process.js';
 import {
-  FAILURES, NODE_MAJOR, POLL_FAILURES, expectLoginFailure, expectStartupFailure, failCommands, launch, polls,
-  publishedLines, request, rest, runRows, until, untilListening,
+  CONNECT_TIMEOUT_ROWS, DROP_ROWS, FAILURES, NODE_MAJOR, POLL_FAILURES, expectLoginFailure, expectStartupFailure,
+  failCommands, launch, polls, publishedMessages, request, rest, runRows, until, untilListening, untilSubscribed,
 } from '../helpers/process.js';
 
 describe('bridge process', () => {
   describe('configuration', () => {
     it('KNOWN BUG KB-20: exits 1 before touching the network with the misspelled "Missing enviromnent variable: <first missing name>"', async () => {
+      // No row may reach the broker, so they can all be pointed at one.
+      const broker = await leaseBroker();
+      await broker.addUser(MQTT_CREDENTIALS);
+
       await runRows(MISSING_ENV, async ({ missing, reported }) => {
-        const ctx = await launch({ env: Object.fromEntries(missing.map((name) => [name, undefined])) });
+        const ctx = await launch({ broker, env: Object.fromEntries(missing.map((name) => [name, undefined])) });
 
         expect(await ctx.bridge.waitForExit()).toEqual({ code: 1, signal: null });
         expect(ctx.bridge.stderr).toContain(`Error: Missing enviromnent variable: ${reported}`);
         expect(ctx.bridge.stdout).toBe('');
         expect(ctx.panel.requests).toEqual([]);
-        expect(ctx.broker.connects).toEqual([]);
       });
-    }, 20000);
+
+      await broker.syncLog();
+      expect(broker.connects).toEqual([]);
+    }, TEST_TIMEOUT);
 
     it('KNOWN BUG KB-41: an empty environment variable counts as set, so an empty USERNAME fails at login instead of in the config check', async () => {
       const ctx = await launch({ env: { USERNAME: '' } });
@@ -33,7 +40,7 @@ describe('bridge process', () => {
       expect(await ctx.bridge.waitForExit()).toEqual({ code: 1, signal: null });
       expect(ctx.bridge.stderr).not.toContain('Missing enviromnent variable');
       expect(ctx.panel.requestsTo('/default.html')).toHaveLength(1);
-    }, 20000);
+    }, TEST_TIMEOUT);
   });
 
   describe('startup', () => {
@@ -50,12 +57,18 @@ describe('bridge process', () => {
       ]);
       expect(ctx.bridge.stdout).toContain('Session value: 91AC25D06A0C26BA');
       expect(ctx.bridge.stdout).toContain('MQTT client connected');
+      await untilSubscribed(ctx);
+      await ctx.broker.syncLog();
+      // Mosquitto never reports passwords: the bridge being let in (CONNACK 0) as the one user that has them is the evidence.
       expect(ctx.broker.connects).toHaveLength(1);
-      expect(ctx.broker.connects[0]).toMatchObject({ username: 'mqttuser', password: 'mqttpass' });
-      await until(() => ctx.broker.subscriptions.length === 2, 'both command subscriptions');
-      expect(ctx.broker.subscriptions).toEqual(['paradox/command/arm', 'paradox/command/disarm']);
+      expect(ctx.broker.connects[0]).toMatchObject({ username: 'mqttuser' });
+      expect(ctx.broker.connacks).toEqual([0]);
+      expect(ctx.broker.subscriptions).toEqual([
+        { topic: 'paradox/command/arm', qos: 0 },
+        { topic: 'paradox/command/disarm', qos: 0 },
+      ]);
       expect(ctx.bridge.result).toBeNull();
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('KNOWN BUG KB-11: a rejected login that the panel answers with the login page again is reported as "Session value not found in login page"', async () => {
       const ctx = await launch({ env: { PASSWORD: 'wrong' } });
@@ -63,7 +76,7 @@ describe('bridge process', () => {
       await expectLoginFailure(ctx, ['Error: Session value not found in login page']);
 
       expect(ctx.panel.requests.map((r) => r.path)).toEqual(LOGIN_ATTEMPT_PATHS);
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('exits 1 with "Login failed" when the panel answers the login with a page of another title', async () => {
       const ctx = await launch();
@@ -76,7 +89,7 @@ describe('bridge process', () => {
       await expectLoginFailure(ctx, ['Error: Login failed']);
 
       expect(ctx.panel.requests.map((r) => r.path)).toEqual(LOGIN_ATTEMPT_PATHS);
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('exits 1 when the panel is not reachable at all, after warning that the logout before login failed', async () => {
       const ctx = await launch({ env: { HOSTNAME: `127.0.0.1:${await reservePort()}` } });
@@ -84,7 +97,7 @@ describe('bridge process', () => {
       await expectLoginFailure(ctx, ['Logout before login failed', 'ECONNREFUSED']);
 
       expect(ctx.panel.requests).toEqual([]);
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('KNOWN BUG KB-5: an index page that keeps failing is requested 11 times back to back before startup gives up', async () => {
       const ctx = await launch();
@@ -93,7 +106,7 @@ describe('bridge process', () => {
       await expectLoginFailure(ctx, ['Request failed with status code 500']);
 
       expect(ctx.panel.requests.map((r) => r.path)).toEqual([...LOGIN_ATTEMPT_PATHS, ...Array(11).fill('/index.html')]);
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('exits 1 when the login page has no session value, without sending any credentials', async () => {
       const ctx = await launch();
@@ -102,7 +115,7 @@ describe('bridge process', () => {
       await expectLoginFailure(ctx, ['Error: Session value not found in login page']);
 
       expect(ctx.panel.requests.map((r) => r.path)).toEqual(['/logout.html', '/login_page.html']);
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('KNOWN BUG KB-10: a zone name with a hyphen makes the index page unparsable and login fail', async () => {
       const ctx = await launch({ panel: { zones: [[1, 'Front-door']] } });
@@ -110,34 +123,43 @@ describe('bridge process', () => {
       await expectLoginFailure(ctx, ["Error: Regex didn't match the value"]);
 
       expect(ctx.panel.requests.map((r) => r.path)).toEqual([...LOGIN_ATTEMPT_PATHS, '/index.html']);
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('exits 1 when the MQTT broker rejects the credentials, without ever polling the panel', async () => {
-      const ctx = await launch({ broker: { credentials: { username: 'someone', password: 'else' } } });
+      const ctx = await launch({ env: { MQTT_PASSWORD: 'not-the-password' } });
 
-      await expectStartupFailure(ctx, ['Connection refused: Bad username or password']);
+      await expectStartupFailure(ctx, [NOT_AUTHORIZED]);
 
-      expect(ctx.broker.connects).toHaveLength(1);
+      await until(() => ctx.broker.connacks.length === 1, 'the broker to answer the login');
+      await ctx.broker.syncLog();
+      // Mosquitto logs a CONNECT only once it accepted it, so the one rejected attempt shows up as a CONNACK alone.
+      expect(ctx.broker.connacks).toEqual([5]);
+      expect(ctx.broker.connects).toEqual([]);
       expect(ctx.bridge.stdout).not.toContain('MQTT client connected');
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('gives up after the 5 s connect timeout when nothing listens on the MQTT port or the broker never answers CONNECT', async () => {
 
-      await runRows(CONNECT_TIMEOUT_ROWS, async ({ nothingListening, broker, connects }) => {
-        const ctx = await launch({ env: nothingListening ? { MQTT_PORT: String(await reservePort()) } : undefined, broker });
-        await until(() => ctx.panel.requestsTo('/index.html').length === 1, 'login to finish');
-        const loggedInAt = Date.now();
+      await runRows(CONNECT_TIMEOUT_ROWS, async ({ proxy, accepted, sentConnect }) => {
+        const ctx = await launch({ proxy });
 
-        await expectStartupFailure(ctx, ['Error: MQTT connect timeout'], { timeout: 9000 });
+        await expectStartupFailure(ctx, ['Error: MQTT connect timeout'], { timeout: 20000 });
 
-        const sinceLogin = Date.now() - loggedInAt;
+        const [index] = ctx.panel.requestsTo('/index.html');
+        const sinceLogin = ctx.bridge.exitedAt - index.at;
         expect(sinceLogin).toBeGreaterThanOrEqual(4500);
         expect(sinceLogin).toBeLessThan(6500);
-        expect(ctx.broker.connects).toHaveLength(connects);
+        expect(ctx.panel.requestsTo('/index.html')).toHaveLength(1);
+        expect(ctx.proxy.accepted).toBe(accepted);
+        if (sentConnect) {
+          expect(ctx.proxy.connects).toMatchObject([{ username: MQTT_CREDENTIALS.username, password: MQTT_CREDENTIALS.password }]);
+        }
+        await ctx.broker.syncLog();
+        expect(ctx.broker.connects).toEqual([]);
         expect(ctx.bridge.stdout).not.toContain('MQTT client connected');
         expect(ctx.panel.requestsTo('/keep_alive.html')).toEqual([]);
       });
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('exits 1 on an uncaught error event when the REST port is already in use', async () => {
       const blocker = await new Promise((resolve) => {
@@ -152,7 +174,7 @@ describe('bridge process', () => {
       expect(ctx.bridge.stderr).toContain('EADDRINUSE');
       expect(ctx.bridge.stdout).toContain('MQTT client connected');
       expect(ctx.bridge.stdout).not.toContain('Server listening');
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('KNOWN BUG KB-25: an out-of-range PORT is only noticed by listen(), after login and the MQTT connect, and exits 1', async () => {
       const ctx = await launch({ env: { PORT: '99999' } });
@@ -162,7 +184,7 @@ describe('bridge process', () => {
       expect(ctx.bridge.stderr).toContain('ERR_SOCKET_BAD_PORT');
       expect(ctx.bridge.stdout).toContain('MQTT client connected');
       expect(ctx.panel.requestsTo('/index.html')).toHaveLength(1);
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('KNOWN BUG KB-25: a non-numeric PORT makes the REST server listen on a Unix socket of that name in the working directory', async () => {
       const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'paradox-bridge-'));
@@ -174,7 +196,7 @@ describe('bridge process', () => {
       expect(fs.statSync(path.join(cwd, 'bridge.sock')).isSocket()).toBe(true);
       const response = await request({ socketPath: path.join(cwd, 'bridge.sock') }, 'GET', '/status');
       expect(response.status).toBe(200);
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('KNOWN BUG KB-13: a panel that never answers during login hangs startup forever, and SIGTERM then kills the process by default action', async () => {
       const ctx = await launch();
@@ -183,6 +205,7 @@ describe('bridge process', () => {
       await until(() => ctx.panel.requestsTo('/login_page.html').length === 1, 'the login page request');
       await settle(1200);
 
+      await ctx.broker.syncLog();
       expect(ctx.bridge.result).toBeNull();
       expect(ctx.broker.connects).toEqual([]);
       expect(ctx.bridge.stdout).not.toContain('Server listening');
@@ -190,7 +213,7 @@ describe('bridge process', () => {
       // The signal handlers are installed only at the very end of startup, so Node's default applies:
       // death by signal instead of the 128 + n exit code of the handled path.
       expect(await ctx.bridge.waitForExit()).toEqual({ code: null, signal: 'SIGTERM' });
-    }, 20000);
+    }, TEST_TIMEOUT);
   });
 
   describe('running', () => {
@@ -200,15 +223,21 @@ describe('bridge process', () => {
 
         // The third poll is due a second after the second one, by when the second one's result has been handled (and published, had it been a change).
         await until(() => polls(ctx.panel).length >= 3, 'three status polls');
+        await ctx.broker.syncLog();
 
-        expect(ctx.broker.published.map((p) => `${p.topic} ${p.payload}`)).toEqual(published);
+        expect(publishedMessages(ctx)).toEqual(published);
         expect(ctx.broker.published.every((p) => p.retain === true && p.qos === 0)).toBe(true);
+        // The broker really holds what was published, and nothing else: the retain flag is not just claimed.
+        const retained = Object.fromEntries(published.map((message) => message.split(' ')));
+        for (const topic of new Set(['paradox/status/armed', ...Object.keys(retained)])) {
+          expect(await ctx.broker.retained(topic)).toBe(retained[topic] ?? null);
+        }
       });
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('publishes later panel changes to MQTT and logs, without publishing, an armed code it does not know', async () => {
       const ctx = await launch();
-      const published = () => publishedLines(ctx);
+      const published = () => publishedMessages(ctx);
       await until(() => published().length === 1, 'the first publish');
 
       ctx.panel.setStatus({ useraccess: [2, 0], statuszone: zones(0, 3) });
@@ -226,20 +255,21 @@ describe('bridge process', () => {
         'paradox/sensor/3 OFF',
       ]);
       expect(ctx.broker.published.every((p) => p.retain === true)).toBe(true);
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('KNOWN BUG KB-16: MQTT command payloads are ignored, the topic alone arms or disarms; a failing command is only logged', async () => {
       const ctx = await launch();
-      const published = () => publishedLines(ctx);
+      const published = () => publishedMessages(ctx);
       await until(() => published().length === 1, 'the first publish');
+      await untilSubscribed(ctx);
 
-      ctx.broker.publish('paradox/command/arm', 'OFF');
+      await ctx.broker.publish('paradox/command/arm', 'OFF');
       await until(() => ctx.panel.requestLines.includes(ARM_LINE), 'the arm request');
       await until(() => published().length === 2, 'the armed state to come back');
 
       failCommands(ctx.panel, ['r']);
-      ctx.broker.publish('paradox/command/arm', 'ON');
-      ctx.broker.publish('paradox/command/disarm', '');
+      await ctx.broker.publish('paradox/command/arm', 'ON');
+      await ctx.broker.publish('paradox/command/disarm', '');
       await until(() => ctx.bridge.stderr.includes('Request failed with status code 500'), 'the failed arm to be logged');
       await until(() => ctx.panel.requestLines.includes(DISARM_LINE), 'the disarm request');
       await until(() => published().length === 3, 'the disarmed state to come back');
@@ -248,7 +278,7 @@ describe('bridge process', () => {
       expect(ctx.bridge.result).toBeNull();
       // Node before 15 only warns about an unhandled rejection and keeps running, so the exit check above would not see it.
       expect(ctx.bridge.stderr).not.toContain('Unhandled');
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('GET /status returns the raw status JSON; POST /arm and /disarm send the panel commands; other routes are 404', async () => {
       const ctx = await launch({ panel: { statuszone: zones(1) } });
@@ -270,7 +300,7 @@ describe('bridge process', () => {
       expect((await rest(ctx, 'GET', '/arm')).status).toBe(404);
       expect((await rest(ctx, 'POST', '/status')).status).toBe(404);
       expect((await rest(ctx, 'GET', '/')).status).toBe(404);
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('KNOWN BUG KB-15: GET /status always reports alarms [0], whatever alarms the panel lists', async () => {
       const ctx = await launch();
@@ -280,7 +310,7 @@ describe('bridge process', () => {
       const { body } = await rest(ctx, 'GET', '/status');
 
       expect(JSON.parse(body).alarms).toEqual([0]);
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('answers 500 with the error message as JSON when the panel fails a REST-triggered request', async () => {
       const ctx = await launch();
@@ -300,7 +330,7 @@ describe('bridge process', () => {
         expect(JSON.parse(response.body)).toEqual({ msg: 'Request failed with status code 500' });
       }
       expect(ctx.bridge.result).toBeNull();
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('KNOWN BUG KB-14: POST /arm answers 200 even though the panel only served the login page, and the next poll then kills the bridge', async () => {
       const ctx = await launch({ panel: { requireLogin: true } });
@@ -313,7 +343,7 @@ describe('bridge process', () => {
       expect(ctx.panel.requestLines).toContain(ARM_LINE);
       expect(ctx.panel.useraccess).toEqual([1, 0]);
       expect(await ctx.bridge.waitForExit()).toEqual({ code: 1, signal: null });
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('KNOWN BUG KB-19: the REST API needs no credentials and listens on every interface (127.0.0.2 stands in for a LAN address)', async () => {
       const ctx = await launch();
@@ -324,22 +354,24 @@ describe('bridge process', () => {
       expect((await request(other, 'GET', '/status')).status).toBe(200);
       expect((await request(other, 'POST', '/arm')).status).toBe(200);
       expect(ctx.panel.requestLines).toContain(ARM_LINE);
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('KNOWN BUG KB-9: sends GET /keep_alive.html?msgid=1 every 3 s without the random cache-buster; a failing keep-alive is only logged', async () => {
 
       await runRows(KEEP_ALIVE_ROWS, async ({ failFirstKeepAlive }) => {
         const ctx = await launch();
         if (failFirstKeepAlive) ctx.panel.respondWith('/keep_alive.html', { status: 500, headers: HTML, body: 'busy' }, { times: 1 });
-        await until(() => ctx.panel.requestsTo('/index.html').length === 1, 'login to finish');
-        const loggedInAt = Date.now();
 
-        await until(() => ctx.panel.requestsTo('/keep_alive.html').length === 1, 'the first keep-alive', 6000);
+        await until(() => ctx.panel.requestsTo('/keep_alive.html').length === 2, 'two keep-alives', 20000);
 
-        const sinceLogin = Date.now() - loggedInAt;
+        const [first, second] = ctx.panel.requestsTo('/keep_alive.html');
+        const sinceLogin = first.at - ctx.panel.requestsTo('/index.html')[0].at;
         expect(sinceLogin).toBeGreaterThanOrEqual(2200);
         expect(sinceLogin).toBeLessThan(4600);
-        expect(ctx.panel.requestLines.filter((line) => line.includes('keep_alive'))).toEqual(['GET /keep_alive.html?msgid=1']);
+        // Both stamps are taken by the panel, so the gap is the bridge's interval plus one loopback hop of jitter.
+        expect(second.at - first.at).toBeGreaterThanOrEqual(2750);
+        expect(second.at - first.at).toBeLessThan(3400);
+        expect(ctx.panel.requestLines.filter((line) => line.includes('keep_alive'))).toEqual(['GET /keep_alive.html?msgid=1', 'GET /keep_alive.html?msgid=1']);
         // Polls run every second: 2 or 3 of them (the third is due together with the keep-alive) come before the first keep-alive.
         const requestPaths = ctx.panel.requests.map((request) => request.path);
         const pollsBeforeKeepAlive = requestPaths.slice(0, requestPaths.indexOf('/keep_alive.html')).filter((path) => path === '/statuslive.html').length;
@@ -353,7 +385,7 @@ describe('bridge process', () => {
         expect(ctx.bridge.result).toBeNull();
         expect(ctx.bridge.stderr).not.toContain('Unhandled');
       });
-    }, 20000);
+    }, TEST_TIMEOUT);
   });
 
   describe('failures after startup', () => {
@@ -370,46 +402,49 @@ describe('bridge process', () => {
         expect(ctx.panel.requestsTo('/login_page.html')).toHaveLength(1);
         expect(polls(ctx.panel)).toHaveLength(pollsReachingPanel);
       });
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('exits 1 when the MQTT connection drops after startup', async () => {
-      const ctx = await launch();
-      await untilListening(ctx);
 
-      ctx.broker.dropClients();
+      await runRows(DROP_ROWS, async ({ proxy, drop }) => {
+        const ctx = await launch({ proxy });
+        await untilListening(ctx);
 
-      expect(await ctx.bridge.waitForExit()).toEqual({ code: 1, signal: null });
-    }, 20000);
+        await drop(ctx);
+
+        expect(await ctx.bridge.waitForExit()).toEqual({ code: 1, signal: null });
+      });
+    }, TEST_TIMEOUT);
 
     it('KNOWN BUG KB-7: the pre-connect error handler is still attached, so a late MQTT error is logged by it before the exit handler ends the process', async () => {
-      const ctx = await launch();
+      const ctx = await launch({ proxy: true });
       await untilListening(ctx);
       expect(ctx.bridge.stderr).toBe('');
 
-      const [client] = ctx.broker.clients;
-      client.send({ cmd: 'connack', returnCode: 4, sessionPresent: false });
+      // A real broker never sends a second CONNACK, so the proxy plays one.
+      ctx.proxy.inject(FORGED_CONNACK_BAD_CREDENTIALS);
 
       expect(await ctx.bridge.waitForExit()).toEqual({ code: 1, signal: null });
       expect(ctx.bridge.stderr).toContain('Connection refused: Bad username or password');
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('KNOWN BUG KB-13: a panel that stops answering is never given up on: polls pile up unanswered and the process neither fails nor exits', async () => {
       const ctx = await launch();
       await untilListening(ctx);
       ctx.panel.respondWith('/statuslive.html', { hang: true });
 
-      await until(() => polls(ctx.panel).length === 2, 'two overlapping polls', 6000);
+      await until(() => polls(ctx.panel).length === 2, 'two overlapping polls');
 
       expect(ctx.bridge.result).toBeNull();
       expect(ctx.bridge.stderr).toBe('');
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('KNOWN BUG KB-38: SIGTERM stops the pollers but does not complete while a REST request is stuck on a hung panel', async () => {
       const ctx = await launch();
       await untilListening(ctx);
       ctx.panel.respondWith('/statuslive.html', { hang: true });
       // Signalled just before the 3 s keep-alive and third poll are due, so a worker that kept running would show up.
-      await until(() => polls(ctx.panel).length === 2, 'the second poll', 6000);
+      await until(() => polls(ctx.panel).length === 2, 'the second poll');
       const stuck = http.get({ host: '127.0.0.1', port: ctx.port, path: '/status', agent: false });
       stuck.on('error', () => {});
       onCleanup(() => stuck.destroy());
@@ -422,7 +457,7 @@ describe('bridge process', () => {
 
       expect(ctx.bridge.result).toBeNull();
       expect(ctx.panel.requests).toHaveLength(requestsAtSignal);
-    }, 20000);
+    }, TEST_TIMEOUT);
   });
 
   describe('shutdown', () => {
@@ -436,7 +471,7 @@ describe('bridge process', () => {
       expect(await ctx.bridge.waitForExit()).toEqual({ code: 143, signal: null });
       expect(ctx.bridge.stdout).toContain('Process received a SIGTERM signal');
       expect(ctx.panel.requestsTo('/logout.html')).toHaveLength(1);
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('exits with 128 plus the signal number on SIGHUP (129) and SIGINT (130)', async () => {
 
@@ -449,7 +484,7 @@ describe('bridge process', () => {
         expect(await ctx.bridge.waitForExit()).toEqual({ code, signal: null });
         expect(ctx.bridge.stdout).toContain(`Process received a ${signal} signal`);
       });
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('KNOWN BUG KB-38: repeated SIGTERM, SIGINT and SIGHUP do not end a shutdown that waits for a stuck request, only SIGKILL does', async () => {
       const ctx = await launch();
@@ -464,14 +499,16 @@ describe('bridge process', () => {
       await until(() => ctx.bridge.stdout.includes('Process received a SIGTERM signal'), 'the first signal to be handled');
       ctx.bridge.kill('SIGINT');
       ctx.bridge.kill('SIGHUP');
+      ctx.bridge.kill('SIGTERM');
       await until(
-        () => ctx.bridge.stdout.includes('Process received a SIGINT signal') && ctx.bridge.stdout.includes('Process received a SIGHUP signal'),
+        () => ['SIGINT', 'SIGHUP'].every((signal) => ctx.bridge.stdout.includes(`Process received a ${signal} signal`))
+          && ctx.bridge.stdout.split('Process received a SIGTERM signal').length === 3,
         'the repeated signals to be handled',
       );
       await settle(1000);
 
       expect(ctx.bridge.result).toBeNull();
-    }, 20000);
+    }, TEST_TIMEOUT);
 
     it('KNOWN BUG KB-38: an idle keep-alive HTTP client delays the SIGTERM exit until its connection closes (Node < 19: the 5 s server keep-alive timeout)', async () => {
       const ctx = await launch();
@@ -480,22 +517,22 @@ describe('bridge process', () => {
       onCleanup(() => agent.destroy());
       expect((await rest(ctx, 'GET', '/status', { agent })).status).toBe(200);
 
-      const signalledAt = Date.now();
+      const signalledAt = performance.now();
       ctx.bridge.kill('SIGTERM');
 
-      expect(await ctx.bridge.waitForExit(9000)).toEqual({ code: 143, signal: null });
+      expect(await ctx.bridge.waitForExit(20000)).toEqual({ code: 143, signal: null });
       // Node >= 19 closes idle connections in server.close(); older versions wait for the socket to time out.
-      if (NODE_MAJOR >= 19) expect(Date.now() - signalledAt).toBeLessThan(2500);
-      else expect(Date.now() - signalledAt).toBeGreaterThanOrEqual(2500);
-    }, 20000);
+      if (NODE_MAJOR >= 19) expect(ctx.bridge.exitedAt - signalledAt).toBeLessThan(2500);
+      else expect(ctx.bridge.exitedAt - signalledAt).toBeGreaterThanOrEqual(2500);
+    }, TEST_TIMEOUT);
   });
 
   describe('logging', () => {
     it('never writes the panel or MQTT credentials to stdout or stderr, however it fails', async () => {
-      await runRows(FAILURES, async ({ panel, broker, arrange, check }) => {
+      await runRows(FAILURES, async ({ panel, brokerUser = mqtt, arrange, check }) => {
         const ctx = await launch({
           panel,
-          broker: { credentials: mqtt, ...broker },
+          brokerUser,
           env: { USERNAME: login.username, PASSWORD: login.password, MQTT_USERNAME: mqtt.username, MQTT_PASSWORD: mqtt.password },
         });
         if (arrange) arrange(ctx);
@@ -505,6 +542,6 @@ describe('bridge process', () => {
         const output = ctx.bridge.stdout + ctx.bridge.stderr;
         for (const secret of [login.username, login.password, mqtt.username, mqtt.password]) expect(output).not.toContain(secret);
       });
-    }, 20000);
+    }, TEST_TIMEOUT);
   });
 });
