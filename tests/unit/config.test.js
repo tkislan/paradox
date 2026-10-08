@@ -1,15 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { loadBridge, loadSpec, rowTitle, setBridgeEnv } from '../support.js';
-
-const spec = loadSpec('config');
-
-const cases = (rows) => rows.map((row) => [rowTitle(row), row]);
-
-function loadConfig({ unset = [], set = {} } = {}) {
-  const unsetEnv = Object.fromEntries(unset.map((key) => [key, undefined]));
-  setBridgeEnv({ ...spec.valid_env, ...set, ...unsetEnv });
-  return loadBridge().load('config.js');
-}
+import { cases } from '../support.js';
+import { loadConfig, spec } from '../helpers/config.js';
 
 describe('config', () => {
   describe('with a missing variable', () => {
