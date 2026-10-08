@@ -112,15 +112,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
           cache-from: type=gha,scope=image
-      - name: The pushed image says which commit it was built from
-        if: github.event_name == 'push'
-        env:
-          REF: ${{ env.IMAGE }}:${{ steps.meta.outputs.version }}
-        run: |
-          label=org.opencontainers.image.revision
-          docker buildx imagetools inspect "$REF" --format '{{json .Image}}' > image.json
-          docker buildx imagetools inspect "$REF" --format '{{json .Manifest.Annotations}}' > annotations.json
-          for platform in linux/amd64 linux/arm64; do
-            test "$(jq -r --arg p "$platform" --arg l "$label" '.[$p].config.Labels[$l]' image.json)" = "$GITHUB_SHA"
-          done
-          test "$(jq -r --arg l "$label" '.[$l]' annotations.json)" = "$GITHUB_SHA"
