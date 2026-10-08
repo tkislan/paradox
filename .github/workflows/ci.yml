@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: x64
+          - platform: linux/arm64
+            arch: arm64
+    steps:
+      - uses: actions/checkout@v7
+      # Only to run the arm64 image for the smoke test; building it needs no emulation.
+      - uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v4
+      # The Dockerfile type-checks (flow) and compiles the sources, so a failing build is a failing check.
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          load: true
+          tags: paradox-bridge:ci
+          cache-from: type=gha,scope=image
+          cache-to: type=gha,scope=image,mode=max
+      - name: Image runs on ${{ matrix.platform }} and finds its dependencies
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          arch=$(docker run --rm --platform "$PLATFORM" --entrypoint node paradox-bridge:ci -p process.arch)
+          test "$arch" = "$EXPECTED_ARCH"
+          docker run --rm --platform "$PLATFORM" --entrypoint node paradox-bridge:ci \
+            -e "for (const name of ['axios', 'express', 'mqtt']) require(name); console.log('dependencies load')"
+          # Without its environment the bridge must stop at the config check, before touching any network.
+          status=0
+          output=$(docker run --rm --platform "$PLATFORM" paradox-bridge:ci 2>&1) || status=$?
+          echo "$output"
+          test "$status" = 1
+          grep -q 'Missing enviromnent variable' <<<"$output"
