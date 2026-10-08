@@ -1,6 +1,8 @@
-import { vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import { FakePanel } from '../mock_paradox.js';
-import { captureConsole, loadBridge, loadSpec, onCleanup, setBridgeEnv, useFakeClock, waitFor } from '../support.js';
+import {
+  captureConsole, loadBridge, loadSpec, onCleanup, setBridgeEnv, settle, useFakeClock, waitFor,
+} from '../support.js';
 import { drain, injectFailure, servePage } from './panel_faults.js';
 
 const golden = loadSpec('crypto').credentials[0];
@@ -84,4 +86,19 @@ export async function applyPoll(panel, poll) {
   if (poll.page) servePage(panel, POLL, poll.page);
   else panel.setStatus(poll);
   return async () => {};
+}
+
+/** Plays one spec scenario: a listener over `zones`, one tick per entry of `polls`, then the events it emitted. */
+export async function expectPollEvents({ zones, polls, expected_events: expectedEvents }) {
+  const { panel, events, tick } = await startListener(zones);
+
+  for (const poll of polls) {
+    const restore = await applyPoll(panel, poll);
+    await tick();
+    await restore();
+  }
+
+  await settle();
+  expect(events).toEqual(expectedEvents);
+  expect([...new Set(panel.requestLines)]).toEqual([POLL_LINE]);
 }

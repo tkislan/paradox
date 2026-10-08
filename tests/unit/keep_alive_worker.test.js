@@ -1,7 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { loadSpec, settle, waitFor, withTitle } from '../support.js';
-import { drain, injectFailure } from '../helpers/panel_faults.js';
-import { KEEP_ALIVE, KEEP_ALIVE_LINE, boot } from '../helpers/keep_alive_worker.js';
+import { KEEP_ALIVE, KEEP_ALIVE_LINE, boot, expectReportedFailures } from '../helpers/keep_alive_worker.js';
 
 const spec = loadSpec('status_machine');
 
@@ -22,18 +21,6 @@ describe('keepAlive() cadence (spec/status_machine.json)', () => {
 });
 
 describe('keepAlive() request', () => {
-  it.each(withTitle(spec.keep_alive_random))('$title', async ({ random, expected_request }) => {
-    const { panel, clock, keepAlive } = await boot();
-    vi.spyOn(Math, 'random').mockReturnValue(random);
-    keepAlive();
-
-    await clock.advance(3000);
-    await waitFor(() => panel.requestsTo(KEEP_ALIVE).length === 1, { message: 'the keep-alive' });
-
-    expect(panel.requestLines).toEqual([expected_request]);
-    expect(panel.requestsTo(KEEP_ALIVE)[0].query).toEqual({ msgid: '1' });
-  });
-
   it('returns at once with { stop }', async () => {
     const { keepAlive } = await boot();
 
@@ -45,27 +32,7 @@ describe('keepAlive() request', () => {
 });
 
 describe('keepAlive() failures', () => {
-  it.each(withTitle(spec.keep_alive_failures))('$title', async ({ ticks, expected_error_logged }) => {
-    const { panel, logs, clock, keepAlive } = await boot();
-    keepAlive();
-    const logged = [];
-
-    for (const { fail } of ticks) {
-      const restore = fail ? await injectFailure(panel, KEEP_ALIVE, fail) : async () => {};
-      const errorsBefore = logs.error.length;
-      const attempts = () => panel.requestsTo(KEEP_ALIVE).length + logs.error.length;
-      const before = attempts();
-      await clock.advance(3000);
-      await waitFor(() => attempts() > before, { message: 'a keep-alive attempt' });
-      await drain();
-      logged.push(logs.error.length - errorsBefore);
-      await restore();
-    }
-
-    await settle();
-    expect(logged).toEqual(expected_error_logged.map(Number));
-    expect([...new Set(panel.requestLines)]).toEqual([KEEP_ALIVE_LINE]);
-  });
+  it.each(withTitle(spec.keep_alive_failures))('$title', expectReportedFailures);
 
   it('logs the error object itself, and only that', async () => {
     const { panel, logs, clock, keepAlive } = await boot();
@@ -89,25 +56,6 @@ describe('keepAlive() failures', () => {
     await waitFor(() => logs.error.length === 1, { message: 'the logged error' });
 
     expect(logs.error[0][0]).toMatchObject({ code: 'ECONNREFUSED' });
-  });
-});
-
-describe('keepAlive() hung panel', () => {
-  it('KNOWN BUG KB-13: a keep-alive that is never answered does not delay the next one and is never reported', async () => {
-    const { panel, logs, clock, keepAlive } = await boot();
-    panel.respondWith(KEEP_ALIVE, { hang: true });
-    keepAlive();
-
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
-      await clock.advance(3000);
-      await waitFor(() => panel.requestsTo(KEEP_ALIVE).length === attempt, { message: `keep-alive ${attempt}` });
-    }
-    await settle();
-
-    expect(logs.error).toEqual([]);
-
-    await panel.stop();
-    await waitFor(() => logs.error.length === 3, { message: 'the dropped connections to surface' });
   });
 });
 

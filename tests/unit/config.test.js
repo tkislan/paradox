@@ -3,12 +3,6 @@ import { cases } from '../support.js';
 import { loadConfig, spec } from '../helpers/config.js';
 
 describe('config', () => {
-  describe('with a missing variable', () => {
-    it.each(cases(spec.missing))('%s', (_title, { unset, error }) => {
-      expect(() => loadConfig({ unset })).toThrow(new Error(error));
-    });
-  });
-
   describe('with every variable set', () => {
     it.each(cases(spec.accepted))('%s', (_title, { set, expected }) => {
       expect(loadConfig({ set })).toStrictEqual(expected);

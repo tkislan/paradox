@@ -46,6 +46,11 @@ export function loadSpec(name) {
   return JSON.parse(fs.readFileSync(path.join(TESTS_DIR, 'spec', `${name}.json`), 'utf8'));
 }
 
+/** Parses tests/spec/known_bugs/<name>.json: the rows of <name>.json that pin a defect, which a port need not reproduce. */
+export function loadKnownBugSpec(name) {
+  return loadSpec(`known_bugs/${name}`);
+}
+
 const cleanups = [];
 
 /** Registers a function to run (LIFO, awaited) after the current test. */

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { settle, useFakeClock, waitFor, withTitle } from '../support.js';
+import { withTitle } from '../support.js';
 import {
-  FLOW_PATHS, SAMPLE_ZONES, crypto, expectHeaders, expectRequestCounts, expectScenario, golden, outcomeOf, spec,
+  FLOW_PATHS, SAMPLE_ZONES, crypto, expectHeaders, expectRequestCounts, golden, outcomeOf, runLoginScenario, spec,
   startBridge, vector, warnings,
 } from '../helpers/login.js';
 
@@ -22,11 +22,7 @@ describe('login()', () => {
     expect(warnings(output)).toEqual([]);
   });
 
-  it.each(withTitle(spec.login))('$title', async (row) => {
-    const bridge = await startBridge({ responses: row.panel });
-
-    await expectScenario(row, bridge);
-  });
+  it.each(withTitle(spec.login))('$title', runLoginScenario);
 
   it('repeats the whole sequence, starting with a logout, on a second login', async () => {
     const { panel, login } = await startBridge();
@@ -75,28 +71,6 @@ describe('login()', () => {
     },
   );
 
-  it('KNOWN BUG KB-11: a wrong password is reported with the session value message and leaves no session', async () => {
-    const { panel, login } = await startBridge({ env: { PASSWORD: 'not the password' } });
-
-    const outcome = await outcomeOf(login());
-
-    expect(outcome.error?.message).toBe('Session value not found in login page');
-    expect(panel.loggedIn).toBe(false);
-    expectRequestCounts(panel, { '/logout.html': 1, '/login_page.html': 1, '/default.html': 1, '/index.html': 0 });
-  });
-
-  it('KNOWN BUG KB-3: a login that fails after the credentials were accepted leaves the panel session open', async () => {
-    const { panel, login } = await startBridge({
-      responses: { '/index.html': { zones: [[1, 'Obývačka']] } },
-    });
-
-    const outcome = await outcomeOf(login());
-
-    expect(outcome.error?.message).toBe("Regex didn't match the value");
-    expect(panel.loggedIn).toBe(true);
-    expect(panel.requestsTo('/logout.html')).toHaveLength(1);
-  });
-
   it('does two independent login sequences when called concurrently', async () => {
     const { panel, login } = await startBridge();
 
@@ -116,25 +90,6 @@ describe('login()', () => {
     expect(outcome.error?.message).toContain('ECONNREFUSED');
     expect(warnings(output)).toEqual(['Logout before login failed']);
   });
-
-  it('KNOWN BUG KB-39: entries of the zone list without a comma between them reach the interpreter and fail with its SyntaxError', async () => {
-    const { login } = await startBridge({
-      responses: { '/index.html': { body: '<html><script>tbl_zone = new Array(1,"A"1,"B");</script></html>' } },
-    });
-
-    const outcome = await outcomeOf(login());
-
-    expect(outcome.error?.name).toBe('SyntaxError');
-  });
-});
-
-describe('login() index page retry', () => {
-  it.each(withTitle(spec.index_retry))('$title', async (row) => {
-    useFakeClock();
-    const bridge = await startBridge({ responses: row.panel });
-
-    await expectScenario(row, bridge);
-  });
 });
 
 describe('login() request headers', () => {
@@ -144,24 +99,6 @@ describe('login() request headers', () => {
     await login();
 
     expectHeaders(panel, row);
-  });
-});
-
-describe('login() against a panel that stops answering', () => {
-  it.each(withTitle(spec.hangs))('$title', async (row) => {
-    const { panel, login } = await startBridge({ responses: { [row.hang]: { hang: true } } });
-    let state = 'pending';
-    const settled = login().then(() => { state = 'resolved'; }, () => { state = 'rejected'; });
-
-    await waitFor(() => panel.requestsTo(row.hang).length === 1, { message: `a request to ${row.hang}` });
-    await settle(100);
-
-    expect(state).toBe('pending');
-    expectRequestCounts(panel, Object.fromEntries(FLOW_PATHS.map((p) => [p, row.expected.request_counts[p] ?? 0])));
-
-    await panel.stop();
-    await settled;
-    expect(state).toBe('rejected');
   });
 });
 

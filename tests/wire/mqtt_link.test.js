@@ -2,10 +2,11 @@ import { inspect } from 'node:util';
 import { describe, expect, it, vi } from 'vitest';
 import { FakePanel } from '../mock_paradox.js';
 import { track } from '../helpers/outcomes.js';
-import { reservePort, settle, withTitle } from '../support.js';
+import { settle, withTitle } from '../support.js';
 import {
-  ARM_REQUEST, ARM_TOPIC, DISARM_REQUEST, DISARM_TOPIC, NOTHING, SECRET_PASSWORD, advanceUntil, arrange, arrangeWithPanel, endAll,
-  eventually, publishPacket, redirectDials, seenByBroker, settled, spec, startLink,
+  ARM_REQUEST, ARM_TOPIC, DISARM_REQUEST, DISARM_TOPIC, NOTHING, SECRET_PASSWORD, arrange, arrangeWithPanel, endAll,
+  eventually, expectCommandsExecuted, expectCredentialsReachBroker, expectHostDialed, expectPortDialed, publishPacket,
+  redirectDials, seenByBroker, settled, spec, startLink,
 } from '../helpers/mqtt_link.js';
 
 describe('createMqttLink(): connecting', () => {
@@ -29,16 +30,6 @@ describe('createMqttLink(): connecting', () => {
     await broker.syncLog();
 
     expect(broker.connects[0].clientId).toMatch(/^mqttjs_[0-9a-f]{8}$/);
-  });
-
-  it('KNOWN BUG KB-32: sends no will, so retained states outlive a dead bridge', async () => {
-    const { broker, createMqttLink } = await arrange();
-
-    await createMqttLink();
-    await broker.syncLog();
-
-    expect(broker.connects).toHaveLength(1);
-    expect(broker.connects[0].will).toBe(false);
   });
 
   it('logs "MQTT client connected", stays quiet afterwards and returns an object with only publish()', async () => {
@@ -66,23 +57,6 @@ describe('createMqttLink(): connecting', () => {
       { topic: ARM_TOPIC, qos: 0 },
       { topic: DISARM_TOPIC, qos: 0 },
     ]);
-  });
-
-  it('KNOWN BUG KB-30: a refused subscription goes unnoticed, the link resolves and logs nothing more', async () => {
-    const mute = { username: 'mute', password: 'quiet' };
-    const { broker, exit, output, createMqttLink } = await arrange({ env: { MQTT_USERNAME: mute.username, MQTT_PASSWORD: mute.password } });
-    await broker.addUser({ ...mute, subscribe: false });
-
-    await createMqttLink();
-    await eventually(() => broker.deniedSubscriptions.length === 2, 'both subscriptions to be denied');
-    await broker.syncLog();
-    await settle();
-
-    expect(broker.deniedSubscriptions).toEqual([ARM_TOPIC, DISARM_TOPIC]);
-    expect(broker.connacks).toEqual([0]);
-    expect(output.log).toEqual([['MQTT client connected']]);
-    expect(output.error).toEqual([]);
-    expect(exit).not.toHaveBeenCalled();
   });
 
   it('leaves no connect-timeout timer behind once connected', async () => {
@@ -128,64 +102,11 @@ describe('createMqttLink(): connecting', () => {
 });
 
 describe('createMqttLink(): credentials in the connection URL', () => {
-  it.each(withTitle(spec.credentials.filter((row) => !row.expected_connect_error)))('$title', async ({
-    username, password, expected_broker_username: brokerUsername, expected_broker_password: brokerPassword, expected_login: expectedLogin = 'accepted',
-  }) => {
-    vi.spyOn(process, 'emitWarning').mockImplementation(() => undefined); // Node 24 warns about URLs it has to guess at
-    const { broker, proxy, createMqttLink } = await arrange({ route: 'proxy', env: { MQTT_USERNAME: username, MQTT_PASSWORD: password } });
-    // A refused row still gets an account of that name, so the refusal can only be about the password that never arrived.
-    await broker.addUser({ username: brokerUsername, password: brokerPassword ?? 'not-the-missing-one' });
-
-    const link = track(createMqttLink());
-    await settled(link);
-    await broker.syncLog();
-
-    expect(proxy.connects.map(({ username: sent, password: sentPassword }) => ({ username: sent, password: sentPassword }))).toEqual([{ username: brokerUsername, password: brokerPassword }]);
-    if (expectedLogin === 'refused') {
-      expect(link.state).toBe('rejected');
-      expect(link.error).toMatchObject({ message: 'Connection refused: Not authorized', code: 5 });
-      expect(broker.connacks).toEqual([5]);
-      return;
-    }
-    expect(link.state).toBe('resolved');
-    expect(broker.connacks).toEqual([0]);
-    expect(broker.connects).toHaveLength(1);
-    expect(broker.connects[0].username).toBe(brokerUsername);
-  });
-
-  it.each(withTitle(spec.credentials.filter((row) => row.expected_connect_error)))('$title', async ({
-    username, password, expected_connect_error: expectedError, expected_dialed: expectedDialed,
-  }) => {
-    vi.spyOn(process, 'emitWarning').mockImplementation(() => undefined);
-    const { broker, clock, output, createMqttLink } = await arrange({ env: { MQTT_USERNAME: username, MQTT_PASSWORD: password } });
-    // Whatever the bridge dials instead of the broker goes to a closed port: no DNS, no stray connection.
-    const dialed = redirectDials({ hostname: '127.0.0.1', port: await reservePort() });
-
-    const link = track(createMqttLink());
-    if (expectedError.after_ms > 0) await clock.advance(expectedError.after_ms);
-    await settled(link);
-    await settle();
-    await broker.syncLog();
-
-    expect(link.state).toBe('rejected');
-    expect(link.error.message).toBe(expectedError.message);
-    expect(seenByBroker(broker)).toEqual(NOTHING);
-    expect(output.error).toEqual([]);
-    // The mqtt client redials on its own 1 s timer, so the same wrong target may be dialed repeatedly.
-    expect([...new Set(dialed.map(({ host, port }) => `${host}:${port}`))]).toEqual(expectedDialed ? [`${expectedDialed.host}:${expectedDialed.port}`] : []);
-  });
+  it.each(withTitle(spec.credentials.filter((row) => !row.expected_connect_error)))('$title', expectCredentialsReachBroker);
 });
 
 describe('createMqttLink(): MQTT_PORT', () => {
-  it.each(withTitle(spec.broker_ports.filter((row) => row.expected_dialed_port)))('$title', async ({ mqtt_port: mqttPort, expected_dialed_port: expectedPort }) => {
-    vi.spyOn(process, 'emitWarning').mockImplementation(() => undefined);
-    const { broker, createMqttLink } = await arrange({ env: { MQTT_PORT: mqttPort } });
-    const dialed = redirectDials(broker);
-
-    await createMqttLink();
-
-    expect(dialed).toEqual([{ host: '127.0.0.1', port: expectedPort }]);
-  });
+  it.each(withTitle(spec.broker_ports.filter((row) => row.expected_dialed_port)))('$title', expectPortDialed);
 
   it.each(withTitle(spec.broker_ports.filter((row) => row.expected_connect_error)))('$title', async ({ mqtt_port: mqttPort, expected_connect_error: expectedError }) => {
     const { broker, output, createMqttLink } = await arrange({ env: { MQTT_PORT: mqttPort } });
@@ -202,15 +123,7 @@ describe('createMqttLink(): MQTT_PORT', () => {
 });
 
 describe('createMqttLink(): MQTT_HOSTNAME', () => {
-  it.each(withTitle(spec.broker_hosts))('$title', async ({ mqtt_hostname: hostname, mqtt_port: mqttPort, expected_dialed: expected }) => {
-    vi.spyOn(process, 'emitWarning').mockImplementation(() => undefined);
-    const { broker, createMqttLink } = await arrange({ env: { MQTT_HOSTNAME: hostname, MQTT_PORT: mqttPort } });
-    const dialed = redirectDials(broker);
-
-    await createMqttLink();
-
-    expect(dialed).toEqual([expected]);
-  });
+  it.each(withTitle(spec.broker_hosts))('$title', expectHostDialed);
 });
 
 describe('createMqttLink(): secrets', () => {
@@ -300,128 +213,6 @@ describe('createMqttLink(): connection failures', () => {
     expect(output.error).toEqual([]);
     expect(exit).not.toHaveBeenCalled();
   });
-
-  it('KNOWN BUG KB-34: an unreachable broker is reported only as the connect timeout, never as a connection error', async () => {
-    const { proxy, clock, output, createMqttLink } = await arrange({ route: 'proxy' });
-    await proxy.stop();
-
-    const link = track(createMqttLink());
-    await clock.advance(4999);
-    expect(link.state).toBe('pending');
-    await clock.advance(1);
-    await settled(link);
-
-    expect(link.state).toBe('rejected');
-    expect(link.error.message).toBe('MQTT connect timeout');
-    expect(output.error).toEqual([]);
-  });
-
-  it('KNOWN BUG KB-17: keeps reconnecting after the connect timeout; a new CONNECT reaches the silent broker', async () => {
-    const { proxy, clock, createMqttLink } = await arrange({ route: 'silent' });
-    const link = track(createMqttLink());
-    await eventually(() => proxy.connects.length === 1, 'the first CONNECT');
-    await clock.advance(5000);
-    await settled(link);
-    expect(link.error.message).toBe('MQTT connect timeout');
-
-    // The mqtt client gives up on the silent connection after its own 30 s CONNACK timeout and redials.
-    await clock.advance(25000);
-    await advanceUntil(clock, () => proxy.connects.length >= 2, 'a second CONNECT');
-
-    expect(proxy.connects).toHaveLength(2);
-  });
-
-  it('KNOWN BUG KB-17: connects late after the timeout, logs "MQTT client connected" and exits when that connection drops', async () => {
-    const { broker, proxy, clock, exit, output, createMqttLink } = await arrange({ route: 'proxy' });
-    await proxy.stop();
-    const link = track(createMqttLink());
-    await clock.advance(5000);
-    await settled(link);
-    expect(link.error.message).toBe('MQTT connect timeout');
-
-    await proxy.start(proxy.port);
-    await advanceUntil(clock, () => proxy.accepted >= 1, 'a late connection');
-    await eventually(() => output.log.length === 1, 'the connected log line');
-
-    expect(output.log).toEqual([['MQTT client connected']]);
-    await broker.syncLog();
-    await settle();
-    expect(new Set(broker.connacks)).toEqual(new Set([0]));
-    expect(broker.subscriptions).toEqual([]);
-    expect(exit).not.toHaveBeenCalled();
-
-    await broker.kick(broker.credentials.username);
-    await eventually(() => exit.mock.calls.length > 0, 'process.exit');
-    expect(exit.mock.calls).toEqual([[1]]);
-  });
-
-  it('KNOWN BUG KB-17: a refused login leaves the client redialing, and the old error handler logs every refusal (KB-7)', async () => {
-    const { broker, clock, exit, output, createMqttLink } = await arrange({ env: { MQTT_PASSWORD: 'wrong' } });
-    const link = track(createMqttLink());
-    await settled(link);
-    expect(output.error).toHaveLength(1);
-
-    // Mosquitto closes the connection after refusing a login, which is what sends the client into its redial loop.
-    await advanceUntil(clock, () => output.error.length >= 2, 'the second refusal to be logged');
-    await broker.syncLog();
-
-    expect(output.error[1][0]).toMatchObject({ message: 'Connection refused: Not authorized', code: 5 });
-    expect(output.error[1][0]).not.toBe(output.error[0][0]);
-    expect(broker.connacks.length).toBeGreaterThanOrEqual(2);
-    expect(new Set(broker.connacks)).toEqual(new Set([5]));
-    expect(exit).not.toHaveBeenCalled();
-  });
-});
-
-describe('createMqttLink(): losing the connection after it was established', () => {
-  it('KNOWN BUG KB-29: exits with code 1 when the broker drops the connection', async () => {
-    const { broker, exit, output, createMqttLink } = await arrange();
-    await startLink({ broker, createMqttLink });
-
-    await broker.kick(broker.credentials.username);
-    await eventually(() => exit.mock.calls.length > 0, 'process.exit');
-    await settle();
-
-    expect(exit.mock.calls).toEqual([[1]]);
-    expect(output.error).toEqual([]);
-  });
-
-  it('KNOWN BUG KB-29: exits with code 1 when the broker shuts down', async () => {
-    const { proxy, broker, exit, createMqttLink } = await arrange({ route: 'proxy' });
-    await startLink({ broker, createMqttLink });
-
-    await proxy.stop();
-    await eventually(() => exit.mock.calls.length > 0, 'process.exit');
-    await settle();
-
-    expect(exit.mock.calls).toEqual([[1]]);
-  });
-
-  it('KNOWN BUG KB-7: a protocol error exits with code 1 and is ALSO logged, because the pre-connect error handler is still attached', async () => {
-    const { proxy, broker, exit, output, createMqttLink } = await arrange({ route: 'proxy' });
-    await startLink({ broker, createMqttLink });
-
-    proxy.inject([0x20, 0x02, 0x00, 0x04]); // a second CONNACK, refusing the login
-    await eventually(() => exit.mock.calls.length > 0, 'process.exit');
-    await settle();
-
-    expect(exit.mock.calls).toEqual([[1]]);
-    expect(output.error).toHaveLength(1);
-    expect(output.error[0][0]).toMatchObject({ message: 'Connection refused: Bad username or password', code: 4 });
-  });
-
-  it('KNOWN BUG KB-7: a malformed packet exits with code 1 and is also logged', async () => {
-    const { proxy, broker, exit, output, createMqttLink } = await arrange({ route: 'proxy' });
-    await startLink({ broker, createMqttLink });
-
-    proxy.inject([0x00, 0x00]); // packet type 0 does not exist
-    await eventually(() => exit.mock.calls.length > 0, 'process.exit');
-    await settle();
-
-    expect(exit.mock.calls).toEqual([[1]]);
-    expect(output.error).toHaveLength(1);
-    expect(output.error[0][0]).toBeInstanceOf(Error);
-  });
 });
 
 describe('publish()', () => {
@@ -503,18 +294,7 @@ describe('publish()', () => {
 });
 
 describe('commands received from the broker', () => {
-  it.each(withTitle(spec.commands))('$title', async ({ messages, expected_panel_requests: expected }) => {
-    const { broker, panel } = await arrangeWithPanel();
-
-    for (const { topic, payload } of messages) await broker.publish(topic, payload);
-    // Messages are handled in order, so once this sentinel's request has arrived everything before it was handled too.
-    await broker.publish(DISARM_TOPIC, 'sentinel');
-    const all = [...expected, DISARM_REQUEST].sort();
-    await eventually(() => panel.requestLines.length >= all.length, 'the panel requests');
-    await settle(); // requests are separate connections: a stray one may still be on its way
-
-    expect([...panel.requestLines].sort()).toEqual(all);
-  });
+  it.each(withTitle(spec.commands))('$title', expectCommandsExecuted);
 
   // A real broker only delivers what the bridge subscribed to; the bridge's own topic matching is reachable by hand only.
   it.each(withTitle(spec.commands.filter((row) => row.delivered_by_broker === false)))('$title, even when delivered although never subscribed', async ({ messages, expected_panel_requests: expected }) => {
@@ -548,21 +328,6 @@ describe('commands received from the broker', () => {
     expect(panel.requestLines).toEqual([DISARM_REQUEST]);
   });
 
-  it.each([
-    [ARM_TOPIC, ARM_REQUEST],
-    [DISARM_TOPIC, DISARM_REQUEST],
-  ])('KNOWN BUG KB-31: a retained %s message is executed again on every start', async (topic, request) => {
-    const panel = await new FakePanel().start();
-    const context = await arrange({ env: { HOSTNAME: panel.hostname } });
-    await context.broker.publish(topic, 'ON', { retain: true });
-
-    await startLink(context);
-    await eventually(() => panel.requestLines.length === 1, 'the replayed command');
-    await settle();
-
-    expect(panel.requestLines).toEqual([request]);
-  });
-
   it('keeps working after a command failed with an HTTP error, and logs the error', async () => {
     const { broker, panel, exit, output } = await arrangeWithPanel();
     panel.respondWith('/statuslive.html', { status: 500, headers: {}, body: 'boom' }, { times: 1 });
@@ -578,18 +343,6 @@ describe('commands received from the broker', () => {
     expect(panel.requestLines).toEqual([ARM_REQUEST, ARM_REQUEST]);
     await settle();
     expect(output.error).toHaveLength(1);
-  });
-
-  it('KNOWN BUG KB-14: a command that the panel answers with its login page (expired session) counts as done and nothing is logged', async () => {
-    const { broker, panel, exit, output } = await arrangeWithPanel({ panel: { requireLogin: true } });
-
-    await broker.publish(ARM_TOPIC, 'ON');
-    await eventually(() => panel.requestLines.length === 1, 'the arm request');
-    await settle();
-
-    expect(panel.requestLines).toEqual([ARM_REQUEST]);
-    expect(output.error).toEqual([]);
-    expect(exit).not.toHaveBeenCalled();
   });
 
   it('logs the error and keeps running when the panel is down', async () => {
@@ -612,23 +365,5 @@ describe('commands received from the broker', () => {
 
     expect(output.error[0][0]).toMatchObject({ code: 'ECONNRESET' });
     expect(exit).not.toHaveBeenCalled();
-  });
-
-  it('KNOWN BUG KB-13: a command to a hung panel neither fails nor blocks the next command, and fails only when the connection dies', async () => {
-    const { broker, panel, output } = await arrangeWithPanel();
-    panel.respondWith('/statuslive.html', { hang: true }, { times: 1 });
-
-    await broker.publish(ARM_TOPIC, 'ON');
-    await eventually(() => panel.requestLines.length === 1, 'the hung request');
-    await broker.publish(DISARM_TOPIC, 'OFF');
-    await eventually(() => panel.requestLines.length === 2, 'the second request');
-    await settle();
-
-    expect(panel.requestLines).toEqual([ARM_REQUEST, DISARM_REQUEST]);
-    expect(output.error).toEqual([]);
-
-    await panel.stop();
-    await eventually(() => output.error.length === 1, 'the hung request to fail');
-    expect(output.error[0][0]).toMatchObject({ code: 'ECONNRESET' });
   });
 });

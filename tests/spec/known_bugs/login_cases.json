@@ -1,0 +1,272 @@
+{
+  "_comment": "Rows of ../login_cases.json that pin a defect of the current code on purpose (known_bug: the catalog id in tests/README.md), moved here unchanged: the same groups and the same row format, which the comment of that file describes. A port does not have to reproduce any of them.",
+  "login": [
+    {
+      "name": "the result carries no slot numbers, so a disabled slot in front of an enabled one shifts its position",
+      "panel": { "/index.html": { "zones": [[0, " "], [1, "Door"]] } },
+      "expected": { "zoneTuples": [[1, "Door"]] },
+      "known_bug": "KB-2",
+      "note": "Door is slot 1 (0-based) on the panel but index 0 of the returned list; status_listener reads statuszone by that list position."
+    },
+    {
+      "name": "a zone assigned to both areas (flag 3) is dropped",
+      "panel": { "/index.html": { "zones": [[3, "Both"], [1, "Area one"], [2, "Area two"]] } },
+      "expected": { "zoneTuples": [[1, "Area one"]] },
+      "known_bug": "KB-18",
+      "note": "tests/README.md: the first number of a tbl_zone pair is an area bitmask, not an enabled flag, so 3 means areas 1 and 2. The bridge keeps only pairs equal to 1."
+    },
+    {
+      "name": "a list of two zones yields only the first",
+      "panel": { "/index.html": { "body": "<html><script>tbl_zone = new Array(1,\"A\",1,\"B\");</script></html>" } },
+      "expected": { "zoneTuples": [[1, "A"]] },
+      "known_bug": "KB-1"
+    },
+    {
+      "name": "a list of three zones yields only the first two",
+      "panel": { "/index.html": { "body": "<html><script>tbl_zone = new Array(1,\"A\",1,\"B\",1,\"C\");</script></html>" } },
+      "expected": { "zoneTuples": [[1, "A"], [1, "B"]] },
+      "known_bug": "KB-1"
+    },
+    {
+      "name": "a list of four zones yields only the first two",
+      "panel": { "/index.html": { "body": "<html><script>tbl_zone = new Array(1,\"A\",1,\"B\",1,\"C\",1,\"D\");</script></html>" } },
+      "expected": { "zoneTuples": [[1, "A"], [1, "B"]] },
+      "known_bug": "KB-1"
+    },
+    {
+      "name": "32 enabled zones yield only the first 16",
+      "panel": {
+        "/index.html": {
+          "zones": [
+            [1, "z01"], [1, "z02"], [1, "z03"], [1, "z04"], [1, "z05"], [1, "z06"], [1, "z07"], [1, "z08"],
+            [1, "z09"], [1, "z10"], [1, "z11"], [1, "z12"], [1, "z13"], [1, "z14"], [1, "z15"], [1, "z16"],
+            [1, "z17"], [1, "z18"], [1, "z19"], [1, "z20"], [1, "z21"], [1, "z22"], [1, "z23"], [1, "z24"],
+            [1, "z25"], [1, "z26"], [1, "z27"], [1, "z28"], [1, "z29"], [1, "z30"], [1, "z31"], [1, "z32"]
+          ]
+        }
+      },
+      "expected": {
+        "zoneTuples": [
+          [1, "z01"], [1, "z02"], [1, "z03"], [1, "z04"], [1, "z05"], [1, "z06"], [1, "z07"], [1, "z08"],
+          [1, "z09"], [1, "z10"], [1, "z11"], [1, "z12"], [1, "z13"], [1, "z14"], [1, "z15"], [1, "z16"]
+        ]
+      },
+      "known_bug": "KB-1"
+    },
+    {
+      "name": "an enabled zone in slot 15 (the 16th) is still seen",
+      "panel": { "/index.html": { "zones_by_slot": { "15": [1, "Sixteenth"] } } },
+      "expected": { "zoneTuples": [[1, "Sixteenth"]] },
+      "known_bug": "KB-1",
+      "note": "Boundary of the bug: slots 0-15 are read."
+    },
+    {
+      "name": "an enabled zone in slot 16 (the 17th) is silently dropped",
+      "panel": { "/index.html": { "zones_by_slot": { "14": [1, "Fifteenth"], "16": [1, "Seventeenth"] } } },
+      "expected": { "zoneTuples": [[1, "Fifteenth"]] },
+      "known_bug": "KB-1"
+    },
+    {
+      "name": "an accented zone name makes login fail",
+      "panel": { "/index.html": { "zones": [[1, "Obývačka"]] } },
+      "expected": { "error": "Regex didn't match the value" },
+      "known_bug": "KB-10"
+    },
+    {
+      "name": "an accented name on a disabled slot makes login fail as well",
+      "panel": { "/index.html": { "zones": [[1, "Door"], [0, "Pivnica č. 2"]] } },
+      "expected": { "error": "Regex didn't match the value" },
+      "known_bug": "KB-10"
+    },
+    {
+      "name": "a hyphen in a zone name makes login fail",
+      "panel": { "/index.html": { "zones": [[1, "Pred-sien"]] } },
+      "expected": { "error": "Regex didn't match the value" },
+      "known_bug": "KB-10"
+    },
+    {
+      "name": "an apostrophe in a zone name makes login fail",
+      "panel": { "/index.html": { "zones": [[1, "Peter's room"]] } },
+      "expected": { "error": "Regex didn't match the value" },
+      "known_bug": "KB-10"
+    },
+    {
+      "name": "a dot in a zone name makes login fail",
+      "panel": { "/index.html": { "zones": [[1, "1.floor"]] } },
+      "expected": { "error": "Regex didn't match the value" },
+      "known_bug": "KB-10"
+    },
+    {
+      "name": "a comma in a zone name makes login fail",
+      "panel": { "/index.html": { "zones": [[1, "A,B"]] } },
+      "expected": { "error": "Regex didn't match the value" },
+      "known_bug": "KB-10"
+    },
+    {
+      "name": "an empty name on an enabled zone makes login fail",
+      "panel": { "/index.html": { "zones": [[1, ""]] } },
+      "expected": { "error": "Regex didn't match the value" },
+      "known_bug": "KB-10"
+    },
+    {
+      "name": "an empty name on a disabled slot makes login fail as well",
+      "panel": { "/index.html": { "zones": [[1, "Door"], [0, ""]] } },
+      "expected": { "error": "Regex didn't match the value" },
+      "known_bug": "KB-10"
+    },
+    {
+      "name": "an enabled flag of two digits makes login fail",
+      "panel": { "/index.html": { "body": "<html><script>tbl_zone = new Array(10,\"A\");</script></html>" } },
+      "expected": { "error": "Regex didn't match the value" },
+      "known_bug": "KB-40",
+      "note": "If the first number really is an area bitmask (tests/README.md), a zone of area 5 (flag 16) makes the whole login fail."
+    },
+    {
+      "name": "wrong credentials answered with the real multi-line login page fail with the session value message",
+      "panel": { "/default.html": { "file": "data/login_page.html" } },
+      "expected": { "error": "Session value not found in login page", "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1 } },
+      "known_bug": "KB-11",
+      "note": "The login page has <head> and <title> on different lines, so the title regex does not match and the copy-pasted message is thrown instead of 'Login failed'. A real panel's answer to wrong credentials was not captured; if it is this page, 'Login failed' is unreachable in practice."
+    },
+    {
+      "name": "a pretty-printed multi-line default page fails with the session value message",
+      "panel": { "/default.html": { "file": "data/pretty_default_page.html" } },
+      "expected": { "error": "Session value not found in login page", "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1 } },
+      "known_bug": "KB-11"
+    },
+    {
+      "name": "a default page without a title fails with the session value message",
+      "panel": { "/default.html": { "body": "<html><head></head><body>hello</body></html>" } },
+      "expected": { "error": "Session value not found in login page", "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1 } },
+      "known_bug": "KB-11"
+    },
+    {
+      "name": "an empty default page fails with the session value message",
+      "panel": { "/default.html": { "body": "" } },
+      "expected": { "error": "Session value not found in login page", "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1 } },
+      "known_bug": "KB-11"
+    },
+    {
+      "name": "upper-case head and title tags are not recognised",
+      "panel": { "/default.html": { "body": "<HTML><HEAD><TITLE>Paradox IP Module</TITLE></HEAD></HTML>" } },
+      "expected": { "error": "Session value not found in login page", "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1 } },
+      "known_bug": "KB-11"
+    },
+    {
+      "name": "a head element that closes on the next line is not recognised",
+      "panel": { "/default.html": { "body": "<html><head><title>Paradox IP Module</title>\n</head></html>" } },
+      "expected": { "error": "Session value not found in login page", "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1 } },
+      "known_bug": "KB-11"
+    },
+    {
+      "name": "a head element without a closing tag is not recognised",
+      "panel": { "/default.html": { "body": "<html><head><title>Paradox IP Module</title></html>" } },
+      "expected": { "error": "Session value not found in login page", "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1 } },
+      "known_bug": "KB-11"
+    },
+    {
+      "name": "a title outside any head element is not recognised",
+      "panel": { "/default.html": { "body": "<html><title>Paradox IP Module</title></html>" } },
+      "expected": { "error": "Session value not found in login page", "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1 } },
+      "known_bug": "KB-11"
+    },
+    {
+      "name": "a head element with attributes is not recognised",
+      "panel": { "/default.html": { "body": "<html><head lang=\"en\"><title>Paradox IP Module</title></head></html>" } },
+      "expected": { "error": "Session value not found in login page", "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1 } },
+      "known_bug": "KB-11"
+    }
+  ],
+  "index_retry": [
+    {
+      "name": "the index page is requested again right after one failure",
+      "panel": { "/index.html": { "status": 500, "times": 1 } },
+      "expected": {
+        "zoneTuples": [[1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"]],
+        "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1, "/index.html": 2 }
+      },
+      "known_bug": "KB-5",
+      "note": "INDEX_PAGE_RETRY_WAIT_TIME (1000 ms) is never used. The test never advances its fake clock, so any wait between attempts would hang it."
+    },
+    {
+      "name": "three failures are retried back to back",
+      "panel": { "/index.html": { "status": 404, "times": 3 } },
+      "expected": {
+        "zoneTuples": [[1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"]],
+        "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1, "/index.html": 4 }
+      },
+      "known_bug": "KB-5"
+    },
+    {
+      "name": "reset connections are retried like HTTP errors",
+      "panel": { "/index.html": { "destroy": true, "times": 2 } },
+      "expected": {
+        "zoneTuples": [[1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"]],
+        "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1, "/index.html": 3 }
+      },
+      "known_bug": "KB-5"
+    },
+    {
+      "name": "ten failures still succeed on the eleventh attempt",
+      "panel": { "/index.html": { "status": 500, "times": 10 } },
+      "expected": {
+        "zoneTuples": [[1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"]],
+        "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1, "/index.html": 11 }
+      },
+      "known_bug": "KB-5"
+    },
+    {
+      "name": "eleven failures reject after exactly eleven attempts",
+      "panel": { "/index.html": { "status": 500 } },
+      "expected": {
+        "error": "Request failed with status code 500",
+        "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1, "/index.html": 11 }
+      },
+      "known_bug": "KB-5"
+    },
+    {
+      "name": "eleven reset connections reject after exactly eleven attempts",
+      "panel": { "/index.html": { "destroy": true } },
+      "expected": {
+        "error": "socket hang up",
+        "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1, "/index.html": 11 }
+      },
+      "known_bug": "KB-5"
+    },
+    {
+      "name": "the error of the last attempt is the one reported",
+      "panel": { "/index.html": [{ "destroy": true, "times": 10 }, { "status": 503 }] },
+      "expected": {
+        "error": "Request failed with status code 503",
+        "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1, "/index.html": 11 }
+      },
+      "known_bug": "KB-5"
+    }
+  ],
+  "hangs": [
+    {
+      "name": "login() never settles while /logout.html is not answered",
+      "hang": "/logout.html",
+      "expected": { "request_counts": { "/logout.html": 1 } },
+      "known_bug": "KB-13"
+    },
+    {
+      "name": "login() never settles while /login_page.html is not answered",
+      "hang": "/login_page.html",
+      "expected": { "request_counts": { "/logout.html": 1, "/login_page.html": 1 } },
+      "known_bug": "KB-13"
+    },
+    {
+      "name": "login() never settles while /default.html is not answered",
+      "hang": "/default.html",
+      "expected": { "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1 } },
+      "known_bug": "KB-13"
+    },
+    {
+      "name": "login() never settles while /index.html is not answered, and is not retried",
+      "hang": "/index.html",
+      "expected": { "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1, "/index.html": 1 } },
+      "known_bug": "KB-13"
+    }
+  ]
+}

@@ -1,12 +1,14 @@
 import { createRequire } from 'node:module';
 import net from 'node:net';
 import path from 'node:path';
-import { vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import { FakePanel } from '../mock_paradox.js';
 import { leaseBroker } from '../mosquitto.js';
 import {
-  BUILD_DIR, captureConsole, loadBridge, loadSpec, onCleanup, setBridgeEnv, spyProcessExit, useFakeClock, waitFor,
+  BUILD_DIR, captureConsole, loadBridge, loadSpec, onCleanup, setBridgeEnv, settle, spyProcessExit, useFakeClock,
+  waitFor,
 } from '../support.js';
+import { track } from './outcomes.js';
 
 vi.setConfig({ testTimeout: 90000, hookTimeout: 90000 }); // a test may wait for a free broker (up to 60 s) before it starts; its cleanup talks to the broker too
 
@@ -128,4 +130,62 @@ export function advanceUntil(clock, condition, message) {
     await clock.advance(1000);
     return false;
   }, { timeout: 15000, interval: 50, message });
+}
+
+export async function expectCredentialsReachBroker({
+  username, password, expected_broker_username: brokerUsername, expected_broker_password: brokerPassword, expected_login: expectedLogin = 'accepted',
+}) {
+  vi.spyOn(process, 'emitWarning').mockImplementation(() => undefined); // Node 24 warns about URLs it has to guess at
+  const { broker, proxy, createMqttLink } = await arrange({ route: 'proxy', env: { MQTT_USERNAME: username, MQTT_PASSWORD: password } });
+  // A refused row still gets an account of that name, so the refusal can only be about the password that never arrived.
+  await broker.addUser({ username: brokerUsername, password: brokerPassword ?? 'not-the-missing-one' });
+
+  const link = track(createMqttLink());
+  await settled(link);
+  await broker.syncLog();
+
+  expect(proxy.connects.map(({ username: sent, password: sentPassword }) => ({ username: sent, password: sentPassword }))).toEqual([{ username: brokerUsername, password: brokerPassword }]);
+  if (expectedLogin === 'refused') {
+    expect(link.state).toBe('rejected');
+    expect(link.error).toMatchObject({ message: 'Connection refused: Not authorized', code: 5 });
+    expect(broker.connacks).toEqual([5]);
+    return;
+  }
+  expect(link.state).toBe('resolved');
+  expect(broker.connacks).toEqual([0]);
+  expect(broker.connects).toHaveLength(1);
+  expect(broker.connects[0].username).toBe(brokerUsername);
+}
+
+export async function expectPortDialed({ mqtt_port: mqttPort, expected_dialed_port: expectedPort }) {
+  vi.spyOn(process, 'emitWarning').mockImplementation(() => undefined);
+  const { broker, createMqttLink } = await arrange({ env: { MQTT_PORT: mqttPort } });
+  const dialed = redirectDials(broker);
+
+  await createMqttLink();
+
+  expect(dialed).toEqual([{ host: '127.0.0.1', port: expectedPort }]);
+}
+
+export async function expectHostDialed({ mqtt_hostname: hostname, mqtt_port: mqttPort, expected_dialed: expected }) {
+  vi.spyOn(process, 'emitWarning').mockImplementation(() => undefined);
+  const { broker, createMqttLink } = await arrange({ env: { MQTT_HOSTNAME: hostname, MQTT_PORT: mqttPort } });
+  const dialed = redirectDials(broker);
+
+  await createMqttLink();
+
+  expect(dialed).toEqual([expected]);
+}
+
+export async function expectCommandsExecuted({ messages, expected_panel_requests: expected }) {
+  const { broker, panel } = await arrangeWithPanel();
+
+  for (const { topic, payload } of messages) await broker.publish(topic, payload);
+  // Messages are handled in order, so once this sentinel's request has arrived everything before it was handled too.
+  await broker.publish(DISARM_TOPIC, 'sentinel');
+  const all = [...expected, DISARM_REQUEST].sort();
+  await eventually(() => panel.requestLines.length >= all.length, 'the panel requests');
+  await settle(); // requests are separate connections: a stray one may still be on its way
+
+  expect([...panel.requestLines].sort()).toEqual(all);
 }
