@@ -1,6 +1,5 @@
 import { specText } from '../support.js';
-
-const html = (body, status = 200) => ({ status, headers: { 'Content-Type': 'text/html' }, body });
+import { html } from './responses.js';
 
 /**
  * Lets loopback responses that have already been written reach the code under test and run its
