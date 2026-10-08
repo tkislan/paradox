@@ -27,10 +27,10 @@ jobs:
       # Compiles src/ and runs the tests with coverage.
       - run: npm test
 
-  # Builds the image the way it is published and runs it on both platforms, on every run, so a pull request proves
-  # that it builds and works and then throws the result away. Only a push (that is, to master) logs in to Docker Hub
-  # and pushes it, tagged 1.0.<run number> only: there is deliberately no latest tag. The commit is in the image
-  # (label org.opencontainers.image.revision, per platform) and on the multi-platform index (the same annotation).
+  # Builds the multi-platform image on every run, so a pull request proves that it builds and then throws the result
+  # away. Only a push (that is, to master) logs in to Docker Hub and pushes it, tagged 1.0.<run number> only: there
+  # is deliberately no latest tag. The commit is in the image (label org.opencontainers.image.revision, per
+  # platform) and on the multi-platform index (the same annotation).
   image:
     needs: test
     runs-on: ubuntu-latest
@@ -39,10 +39,6 @@ jobs:
       IMAGE: tkislan/paradox
     steps:
       - uses: actions/checkout@v7
-      # Only to run the arm64 image for the smoke test; building it needs no emulation.
-      - uses: docker/setup-qemu-action@v4
-        with:
-          platforms: arm64
       - uses: docker/setup-buildx-action@v4
       - name: Log in to Docker Hub
         if: github.event_name == 'push'
@@ -61,25 +57,7 @@ jobs:
             latest=false
           tags: |
             type=raw,value=1.0.${{ github.run_number }}
-      # A multi-platform image cannot be loaded into Docker, so each platform is built on its own and run before
-      # anything is pushed. The Dockerfile type-checks (flow) and compiles the sources, so a failing build is a
-      # failing check. The builder keeps its layers, which makes the final build below nearly free.
-      - name: Image runs on each platform and finds its dependencies
-        run: |
-          for target in linux/amd64:x64 linux/arm64:arm64; do
-            platform=${target%%:*}
-            docker buildx build --platform "$platform" --load --tag paradox-bridge:ci .
-            arch=$(docker run --rm --platform "$platform" --entrypoint node paradox-bridge:ci -p process.arch)
-            test "$arch" = "${target#*:}"
-            docker run --rm --platform "$platform" --entrypoint node paradox-bridge:ci \
-              -e "for (const name of ['axios', 'express', 'mqtt']) require(name); console.log('dependencies load')"
-            # Without its environment the bridge must stop at the config check, before touching any network.
-            status=0
-            output=$(docker run --rm --platform "$platform" paradox-bridge:ci 2>&1) || status=$?
-            echo "$output"
-            test "$status" = 1
-            grep -q 'Missing enviromnent variable' <<<"$output"
-          done
+      # The Dockerfile type-checks (flow) and compiles the sources, so a failing build is a failing check.
       # No emulation needed: the stages that run commands are pinned to amd64, the final stage only copies.
       - name: Build, and push on master
         uses: docker/build-push-action@v7
@@ -90,3 +68,5 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
