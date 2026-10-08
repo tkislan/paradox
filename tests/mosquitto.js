@@ -22,9 +22,9 @@ import { onCleanup, reservePort, settle, waitFor } from './support.js';
  *     retain flag as the publisher set it). Delivered through an MQTT 5 observer with retain-as-published.
  *   - `connects`, `subscriptions`, `connacks`, `disconnects`: parsed from Mosquitto's own log, which is the
  *     only place the broker reports protocol level, clean session, keepalive, will and subscription QoS.
- * What a test can do: publish as another client, add users (with or without permission to subscribe), kick a
- * user's sessions, and route the bridge through a `proxy()` to inject transport faults Mosquitto cannot
- * produce itself (refused or black-holed connections, forged CONNACK, malformed bytes, dropped sockets).
+ * What a test can do: publish as another client, add users, kick a user's sessions, and route the bridge
+ * through a `proxy()` to inject transport faults Mosquitto cannot produce itself (refused or black-holed
+ * connections, malformed bytes, dropped sockets).
  *
  * The harness's own MQTT client has no keepalive and no reconnect, so it creates no timers that the fake
  * clock could freeze.
@@ -119,7 +119,7 @@ const withTimeout = (promise, message, ms = LOG_TIMEOUT) => Promise.race([
 ]);
 
 /**
- * Exclusive use of one Mosquitto instance for the rest of the current test; released, with users, roles and
+ * Exclusive use of one Mosquitto instance for the rest of the current test; released, with users and
  * retained messages removed, by the test's cleanup.
  */
 export async function leaseBroker() {
@@ -146,7 +146,6 @@ class Broker {
     this.published = [];
     this.log = [];
     this.users = new Set();
-    this.roles = new Set();
     this.retainedTopics = new Set();
     this.proxies = [];
     this.pendingDynsec = null;
@@ -256,24 +255,10 @@ class Broker {
     return payload;
   }
 
-  /**
-   * Creates a user for this test. `subscribe: false` gives it a role that forbids every subscription, so the
-   * broker answers SUBSCRIBE with failure code 0x80.
-   */
-  async addUser({ username, password, subscribe = true }) {
+  /** Creates a user for this test. */
+  async addUser({ username, password }) {
     this.users.add(username);
-    const commands = [{ command: 'createClient', username, password }];
-    if (!subscribe) {
-      const rolename = `no-subscribe-${randomUUID()}`;
-      this.roles.add(rolename);
-      commands.push(
-        { command: 'createRole', rolename },
-        { command: 'addRoleACL', rolename, acltype: 'subscribePattern', topic: '#', allow: false, priority: 10 },
-        { command: 'addRoleACL', rolename, acltype: 'subscribeLiteral', topic: '#', allow: false, priority: 10 },
-        { command: 'addClientRole', username, rolename },
-      );
-    }
-    await this.dynsec(commands);
+    await this.dynsec([{ command: 'createClient', username, password }]);
     return { username, password };
   }
 
@@ -308,12 +293,10 @@ class Broker {
       } else if ((match = /^Sending CONNACK to (\S+) \((\d), (\d+)\)$/.exec(text))) {
         events.push({ type: 'connack', clientId: match[1], returnCode: Number(match[3]) });
       } else if ((match = /^Received SUBSCRIBE from (\S+)$/.exec(text))) {
-        last = { type: 'subscribe', clientId: match[1], topics: [], denied: [] };
+        last = { type: 'subscribe', clientId: match[1], topics: [] };
         events.push(last);
       } else if (last && last.type === 'subscribe' && (match = /^\t(.+) \(QoS (\d)\)$/.exec(text))) {
         last.topics.push({ topic: match[1], qos: Number(match[2]) });
-      } else if (last && last.type === 'subscribe' && (match = /^\t(.+) \(denied\)$/.exec(text))) {
-        last.denied.push(match[1]);
       } else if ((match = /^Received PUBLISH from (\S+) \(d(\d), q(\d), r(\d), m\d+, '(.*)', \.\.\. \((\d+) bytes\)\)$/.exec(text))) {
         events.push({ type: 'publish', clientId: match[1], qos: Number(match[3]), retain: match[4] === '1', topic: match[5], bytes: Number(match[6]) });
       } else if ((match = /^Client (\S+) \[\S+\] disconnected(?:: (.*))?\.$/.exec(text))) {
@@ -343,11 +326,6 @@ class Broker {
     return this.events.filter((e) => e.type === 'subscribe').flatMap((e) => e.topics);
   }
 
-  /** Topics the broker refused to subscribe the code under test to (its ACL forbids them), sorted. */
-  get deniedSubscriptions() {
-    return this.events.filter((e) => e.type === 'subscribe').flatMap((e) => e.denied).sort();
-  }
-
   /** CONNACK return codes (0 accepted, 5 not authorised: Mosquitto uses it for failed logins too) sent to the code under test. */
   get connacks() {
     return this.events.filter((e) => e.type === 'connack').map((e) => e.returnCode);
@@ -370,7 +348,6 @@ class Broker {
     // A test may have deleted users itself; cleanup must not stop at the first command that no longer applies.
     await this.dynsec([
       ...[...this.users].map((username) => ({ command: 'deleteClient', username })),
-      ...[...this.roles].map((rolename) => ({ command: 'deleteRole', rolename })),
       { command: 'enableClient', username: BRIDGE_USER.username },
     ]).catch(() => this.reset());
     await this.clearRetained();
@@ -380,8 +357,8 @@ class Broker {
 
 /**
  * TCP relay between the code under test and a leased broker. Besides forwarding bytes it can behave like the
- * network or a broken broker would: refuse connections, accept them and say nothing, answer with fixed bytes,
- * write garbage to connected clients, or cut every connection.
+ * network or a broken broker would: refuse connections, accept them and say nothing, write garbage to connected
+ * clients, or cut every connection.
  */
 class BrokerProxy {
   constructor(broker) {
@@ -389,7 +366,7 @@ class BrokerProxy {
     this.hostname = '127.0.0.1';
     this.sockets = new Set();
     this.mode = { kind: 'forward' };
-    /** TCP connections accepted so far (also while black-holed or replying), to tell redials. */
+    /** TCP connections accepted so far (also while black-holed), to tell redials. */
     this.accepted = 0;
     /**
      * CONNECT packets the clients sent through this proxy, in any mode: { clientId, username, password, keepalive,
@@ -425,10 +402,6 @@ class BrokerProxy {
     parser.on('error', () => {});
     client.on('data', (chunk) => parser.parse(chunk));
     if (this.mode.kind === 'blackhole') return;
-    if (this.mode.kind === 'reply') {
-      client.once('data', () => client.end(this.mode.bytes));
-      return;
-    }
     const upstream = net.connect(this.broker.port, this.broker.hostname);
     this.sockets.add(upstream);
     upstream.on('close', () => { this.sockets.delete(upstream); client.destroy(); });
@@ -441,11 +414,6 @@ class BrokerProxy {
   /** New connections are accepted and then ignored: the client's CONNECT is never answered. */
   blackhole() {
     this.mode = { kind: 'blackhole' };
-  }
-
-  /** New connections get `bytes` as the answer to their first packet, then are closed (e.g. a forged CONNACK). */
-  replyWith(bytes) {
-    this.mode = { kind: 'reply', bytes: Buffer.from(bytes) };
   }
 
   forward() {

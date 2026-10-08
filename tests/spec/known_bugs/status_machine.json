@@ -207,46 +207,5 @@
       "known_bug": "KB-12",
       "note": "The listener itself keeps polling; app.js turns the first error into process.exit(1)."
     }
-  ],
-  "keep_alive_failures": [
-    {
-      "name": "the login page after the session expired counts as success",
-      "ticks": [{ "fail": { "page": { "file": "data/login_page.html" } } }, {  }],
-      "expected_error_logged": [false, false],
-      "known_bug": "KB-28",
-      "note": "The response is never inspected: a 2xx answer is success even when it says the session is gone (same family as KB-14)."
-    }
-  ],
-  "keep_alive_random": [
-    {
-      "name": "Math.random() = 0",
-      "random": 0,
-      "expected_request": "GET /keep_alive.html?msgid=1",
-      "known_bug": "KB-9"
-    },
-    {
-      "name": "Math.random() = 1e-7",
-      "random": 1e-7,
-      "expected_request": "GET /keep_alive.html?msgid=1",
-      "known_bug": "KB-9"
-    },
-    {
-      "name": "Math.random() = 0.5",
-      "random": 0.5,
-      "expected_request": "GET /keep_alive.html?msgid=1",
-      "known_bug": "KB-9"
-    },
-    {
-      "name": "Math.random() = 0.123456789",
-      "random": 0.123456789,
-      "expected_request": "GET /keep_alive.html?msgid=1",
-      "known_bug": "KB-9"
-    },
-    {
-      "name": "Math.random() = 0.9999999999999999",
-      "random": 0.9999999999999999,
-      "expected_request": "GET /keep_alive.html?msgid=1",
-      "known_bug": "KB-9"
-    }
   ]
 }

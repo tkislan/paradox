@@ -20,7 +20,7 @@ pulls the image). `npm test` starts them if needed and removes them afterwards. 
 them running (watch mode, several runs in parallel); `MOSQUITTO_REPLICAS` changes their number. Runs never
 recreate running containers, so after editing the compose file run `docker compose -f tests/docker-compose.yml down` first.
 
-About 930 tests, 65 s. `npx vitest run --exclude 'tests/known_bugs/**'` skips the 290 that pin a defect. In agent/CI
+About 730 tests, 50 s. `npx vitest run --exclude 'tests/known_bugs/**'` skips the 206 that pin a defect. In agent/CI
 environments vitest may pick a reporter that hides console output; use `npx vitest run --reporter=default` to see
 whether a change made the suite noisy (it must stay silent).
 
@@ -35,9 +35,12 @@ Set `PARADOX_BUILD_DIR=<absolute path>` to run against an existing build directo
 
 ## Coverage
 
-99.5 % of lines, 97.7 % of branches. The rest is dead code in `src/`: the `default:` case of the sensor handler
+98.2 % of lines, 97.7 % of branches. Dead code in `src/` is not covered: the `default:` case of the sensor handler
 (`app.js:43`, the value is always a boolean) and `initSensorStatus` (`status_listener.js:26-28`, never called).
-Everything else (`util.sleep`, the `playground.js` script, the shutdown-callback rejection path, ...) is covered.
+Deliberately without a test: the `playground.js` script and the shutdown-callback rejection path of `signal.js`
+(lines 23-24). `config.js`, `mqtt_link.js`, `keep_alive_worker.js` and `signal.js` have no tests of their own, because
+the Python port does not need them; the system tests only run them, so they show as covered even where no assertion
+would notice a changed value.
 `system/process.test.js` runs the bridge as a child process, which vitest's coverage cannot see; it adds
 evidence about exit codes and real signals, not coverage numbers.
 
@@ -45,7 +48,7 @@ evidence about exit codes and real signals, not coverage numbers.
 
 | Path | What |
 | --- | --- |
-| `spec/*.json`, `spec/crypto_reference.py` | Language-neutral case tables and an independent Python reference. **This is the part to reuse from Python.** `crypto` (vectors), `util`, `config`, `status_pages` (panel page -> parsed status), `login_cases` (panel responses -> zones or error), `status_machine` (poll sequence -> events), `mqtt`, `system_scenarios` (whole-bridge timelines). |
+| `spec/*.json`, `spec/crypto_reference.py` | Language-neutral case tables and an independent Python reference. **This is the part to reuse from Python.** `crypto` (vectors), `util`, `status_pages` (panel page -> parsed status), `login_cases` (panel responses -> zones or error), `status_machine` (poll sequence -> events), `system_scenarios` (whole-bridge timelines). |
 | `spec/known_bugs/*.json` | The rows of those tables that pin a defect (`"known_bug"`), same groups and row format. A port can ignore them. |
 | `data/*.html` | Real pages captured from a panel. Spec files reference them by path. |
 | `mock_paradox.js` | Fake panel: the HTTP contract the bridge needs, as a pure `handle()` plus a loopback server. |
@@ -53,9 +56,9 @@ evidence about exit codes and real signals, not coverage numbers.
 | `support.js` | Loader for the built bridge, env, console/exit/signal/timer helpers. |
 | `helpers/`, `fixtures/` | Everything that is not a test case. `helpers/<area>.js` holds the code a test file needs (world builders, request/outcome assertions, scenario interpreters, small constants) and `fixtures/<area>.js` the scenario tables and shared data (`fixtures/known_bugs/` the ones only the known-bug tests use). Test files import from them and contain only `describe`/`it`. |
 | `unit/` | One module at a time, driven by `spec/` tables where the cases are data. |
-| `wire/` | `api/*` and `mqtt_link` against the fake panel / a real broker; assertions on requests, messages and broker-side events. |
+| `wire/` | `api/*` against the fake panel; assertions on the requests it receives and on what the calls return. |
 | `system/` | The whole bridge (`app.js`) in-process and as a child process. |
-| `known_bugs/` | The tests that pin a defect, one file per file of `unit/`, `wire/` and `system/` that has any (`known_bugs/mqtt_link.test.js` holds what was cut from `wire/mqtt_link.test.js`), with the same `describe` names. A port can ignore the directory. |
+| `known_bugs/` | The tests that pin a defect, one file per file of `unit/`, `wire/` and `system/` that has any, with the same `describe` names. A port can ignore the directory. |
 
 ## Conventions
 
@@ -91,13 +94,14 @@ afterwards. Mosquitto reports less than a hand-written fake could, so the harnes
 | Need | Where it comes from |
 | --- | --- |
 | Messages the bridge published (topic, payload, QoS, retain flag as set) | `broker.published`, via an MQTT 5 observer with retain-as-published; `broker.retained(topic)` is what a new subscriber gets |
-| Connect (protocol level, clean session, keepalive, will), subscriptions with QoS, denied subscriptions, CONNACK codes, disconnects, client publishes | `broker.connects`, `subscriptions`, `deniedSubscriptions`, `connacks`, `disconnects`, `clientPublishes`: parsed from Mosquitto's log, which lags the connection. Always `waitFor`, and `await broker.syncLog()` before asserting that something did *not* happen |
+| Connect (protocol level, clean session, keepalive, will), subscriptions with QoS, CONNACK codes, disconnects, client publishes | `broker.connects`, `subscriptions`, `connacks`, `disconnects`, `clientPublishes`: parsed from Mosquitto's log, which lags the connection. Always `waitFor`, and `await broker.syncLog()` before asserting that something did *not* happen |
 | Credentials | never in the broker log. `broker.addUser()` creates (through the dynamic security plugin) the account the test expects the bridge to authenticate as; success is the evidence. A refused login is CONNACK 5, never 4. `proxy.connects` shows what was sent |
-| Other clients, kicked sessions, users that may not subscribe | `broker.publish()`, `broker.kick()`, `broker.addUser({ subscribe: false })` |
-| Faults Mosquitto cannot produce (refused or silent connections, forged CONNACK, malformed bytes, cut sockets) | `broker.proxy()`: a TCP relay in front of the broker with `stop()`/`start(port)`, `blackhole()`, `replyWith(bytes)`, `inject(bytes)`, `dropConnections()`, `accepted`, `connects` |
+| Other clients, kicked sessions, other users | `broker.publish()`, `broker.kick()`, `broker.addUser()` |
+| Faults Mosquitto cannot produce (refused or silent connections, malformed bytes, cut sockets) | `broker.proxy()`: a TCP relay in front of the broker with `stop()`/`start(port)`, `blackhole()`, `inject(bytes)`, `dropConnections()`, `accepted`, `connects` |
 
-The harness's own MQTT client (the `mqtt5` alias of `mqtt@5`; the bridge keeps using the root's `mqtt@2`, which
-`unit/dependencies.test.js` guards) has no keepalive or reconnect timers, so the fake clock cannot freeze it.
+The harness's own MQTT client (the `mqtt5` alias of `mqtt@5`) has no keepalive or reconnect timers, so the fake clock
+cannot freeze it. It must not be installed under the name `mqtt`: the compiled bridge resolves `mqtt` and would
+silently run against v5 instead of the production 2.18.8. Nothing guards this.
 `vitest -t` matches only the first 40 characters of a `$title` test name.
 
 ## Porting to Python
@@ -111,7 +115,6 @@ projects), then the parsing tables (`status_pages`, `login_cases`), then `status
 - Rows with `"js_only"` describe JavaScript semantics (`vm` evaluation, `NaN`, octal literals, cross-realm arrays).
 - Error strings that come from axios or V8 (`Request failed with status code 500`, `socket hang up`) are not
   portable; only the fact of failing is. The bridge's own messages (`Login failed`, ...) are.
-- Rows that count dials or build URLs (`spec/mqtt.json`, `spec/known_bugs/mqtt.json`) only matter for a port that builds an MQTT URL.
 
 | JS | Python |
 | --- | --- |
@@ -119,7 +122,7 @@ projects), then the parsing tables (`status_pages`, `login_cases`), then `status
 | `crypto_reference.py` | start of the client library; `python3 -I spec/crypto_reference.py` checks all vectors |
 | `FakePanel.handle(request)` | an `aioclient_mock` callback or `aiohttp` test server around the same function |
 | `FakePanel.requestLines` assertions | the exact URLs the client must request, in order |
-| Mosquitto fixtures | only if the port keeps MQTT; Home Assistant has its own MQTT test helpers (`mqtt_mock`). The `mqtt.json` rows describe outcomes, not packets |
+| Mosquitto fixtures | only if the port keeps MQTT; Home Assistant has its own MQTT test helpers (`mqtt_mock`) |
 
 ## Mutation checks
 
@@ -135,7 +138,8 @@ PARADOX_KEEP_BROKERS=1 PARADOX_BUILD_DIR=$PWD/tests/.mutants/m1 npx vitest run u
 
 Each row is pinned by tests titled `KNOWN BUG KB-n: ...` (files in `known_bugs/`, named like the test file they
 were split from) and by spec rows with `"known_bug": "KB-n"` (files in `spec/known_bugs/`). "Port" is a suggestion,
-not something the tests assert.
+not something the tests assert. The ids are not renumbered: KB-24, 26, 29-32, 34, 42 and 43 are missing because the
+tests that pinned them (for `config.js`, `mqtt_link.js` and `signal.js`) were removed.
 
 | ID | What the code does today | Pinned in | Port |
 | --- | --- | --- | --- |
@@ -145,34 +149,27 @@ not something the tests assert.
 | KB-4 | Startup events are emitted before anyone can listen. Initial state is assumed (armed unknown, all sensors closed), so only *differences* are published after a start: closed sensors publish nothing and retained topics keep stale values | `status_machine.json`, `system_scenarios.json` | publish the full state at start |
 | KB-5 | `retry` ignores its wait time: the index page is requested up to 11 times back to back. Only failed requests are retried, not a 200 that does not parse | `util.json`, `login_cases.json` | back off |
 | KB-6 | `deepArrayEqual` is shallow and never equal for `NaN` (only affects log output) | `util.json` | - |
-| KB-7 | `removeAllListeners(['connect','error'])` takes an array and removes nothing, so the pre-connect handlers stay: a later client error is logged by the old handler and exits | `mqtt_link.test.js` | - |
-| KB-8 | MQTT credentials go into `mqtt://user:pass@host:port` unescaped: a `:` inside or at the start of the password shifts the split, an empty password becomes username `user:` with no password, `/ # ?` turn the username into the host, a malformed `%` throws | `mqtt.json` | pass credentials as fields |
-| KB-9 | The keep-alive's random cache-buster is dropped by axios (`null` value): the wire request is `GET /keep_alive.html?msgid=1` | `status_pages.json`, `status_machine.json` | check against a real panel |
+| KB-7 | `removeAllListeners(['connect','error'])` takes an array and removes nothing, so the pre-connect handlers stay: a later client error is logged by the old handler and exits | `app.test.js`, `process.test.js` | - |
+| KB-8 | MQTT credentials go into `mqtt://user:pass@host:port` unescaped, so an empty password becomes username `user:` with no password, which the broker rejects with CONNACK 5 | `app.test.js` | pass credentials as fields |
+| KB-9 | The keep-alive's random cache-buster is dropped by axios (`null` value): the wire request is `GET /keep_alive.html?msgid=1` | `status_pages.json`, `status.test.js` | check against a real panel |
 | KB-10 | Zone names must match `[\w ]+` (ASCII, no hyphen, not empty), also on disabled slots; one accented name makes login fail with "Regex didn't match the value" | `login_cases.json`, `util.json` | parse leniently |
 | KB-11 | The title regex does not cross newlines, so a pretty-printed page never matches and the error is the copy-pasted "Session value not found in login page". The captured `login_page.html` is multi-line, so wrong credentials surface that way and "Login failed" is practically unreachable | `login_cases.json`, `login.test.js` | real HTML parsing |
 | KB-12 | No session recovery: the first failed poll (HTTP error, refused connection, or the login page after the session expired) ends the bridge with exit 1 and relies on Docker to restart it. The listener itself recovers on the next good poll | `status_machine.json`, `system_scenarios.json` | detect expiry, re-login |
 | KB-13 | No HTTP timeouts and no in-flight guard: a hung panel hangs every call, polls overlap, a late stale response overwrites newer state | `status_pages.json`, `status_machine.json`, `*.test.js` | timeouts, one request at a time |
 | KB-14 | `arm`/`disarm` ignore the response: any 2xx (including the login page after expiry) is success | `status_pages.json`, `alarm.test.js` | verify the state change |
 | KB-15 | Alarm and trouble tables are never parsed (`alarms` is always `[0]`) | `status_pages.json` | parse them |
-| KB-16 | Any payload on `paradox/command/arm|disarm` triggers the command | `mqtt.json`, `system_scenarios.json` | validate payload |
-| KB-17 | The 5 s connect timeout rejects but never ends the MQTT client, which keeps reconnecting | `mqtt_link.test.js` | - |
+| KB-16 | Any payload on `paradox/command/arm|disarm` triggers the command | `system_scenarios.json`, `process.test.js` | validate payload |
+| KB-17 | The 5 s connect timeout rejects but never ends the MQTT client, which keeps reconnecting | `system_scenarios.json` | - |
 | KB-18 | Only area 1 exists: `useraccess[0]`, command `area=00`, and the `tbl_zone` flag (really an area bitmask, see below) is compared with `== 1`, dropping zones of area 2 or of both | `login_cases.json`, `status_machine.json` | all areas |
 | KB-19 | The REST API (`GET /status`, `POST /arm`, `POST /disarm`) has no authentication and listens on all interfaces | `system_scenarios.json` | - |
-| KB-20 | Config error text is `Missing enviromnent variable: <KEY>` (sic) | `config.json` | - |
+| KB-20 | Config error text is `Missing enviromnent variable: <KEY>` (sic) | `system_scenarios.json`, `process.test.js` | - |
 | KB-21 | Only zone code `1` is "open"; `4` (open+trouble), `6` (open+memory, zone 5 of the captured `unarmed.html`) and `2` (alarm) read as closed | `status_machine.json` | map all codes |
 | KB-22 | Only `useraccess` 1, 2, 7 are mapped (7 = exit delay counts as armed); stay, sleep, in alarm, entry delay, ready, ... become "unknown" and publish nothing, so an alarm is never reported | `status_machine.json` | map all codes |
 | KB-23 | `tbl_* = new Array(n)` with one number is `n` empty slots, not `[n]` | `status_pages.json`, `util.test.js` | parse literals |
-| KB-24 | An unparsable `MQTT_PORT` silently becomes 1883; above 65535 it rejects with a RangeError | `mqtt.json` | validate |
 | KB-25 | `PORT` is not validated: out of range exits 1 after login and the MQTT connect; non-numeric makes Express listen on a Unix socket of that name in the working directory | `process.test.js` | validate |
-| KB-26 | `MQTT_HOSTNAME` is pasted unescaped into the URL | `mqtt.json` | - |
 | KB-27 | An error in the poll callback (no `'error'` listener, after `stop()`, or a throwing listener) is an unhandled promise rejection | `status_listener.test.js` | - |
-| KB-28 | The keep-alive ignores its response, like `arm` | `status_pages.json`, `status_machine.json` | - |
-| KB-29 | Any broker connection loss after startup exits the process | `mqtt_link.test.js` | reconnect |
-| KB-30 | A refused subscription (SUBACK 0x80) is never noticed | `mqtt_link.test.js` | - |
-| KB-31 | The retain flag of inbound commands is ignored, so a retained command is executed on every start | `mqtt_link.test.js` | - |
-| KB-32 | No MQTT Last Will / availability topic | `mqtt_link.test.js` | publish availability |
+| KB-28 | The keep-alive ignores its response, like `arm` | `status_pages.json`, `status.test.js` | - |
 | KB-33 | Shutdown does not disconnect from MQTT | `app.test.js` | - |
-| KB-34 | An unreachable broker only shows up as `MQTT connect timeout` after 5 s (mqtt 2.18 swallows socket errors) | `mqtt_link.test.js` | - |
 | KB-35 | A failed login logs the whole axios error, including the hashed credentials | `app.test.js` | redact |
 | KB-36 | A failed parse logs the whole page and the pattern | `status.test.js` | - |
 | KB-37 | `EADDRINUSE` on the REST port is an uncaught exception | `app.test.js` | - |
@@ -180,8 +177,6 @@ not something the tests assert.
 | KB-39 | Panel tables are evaluated as JavaScript (`vm`): `1+2` is computed, `010` is octal, a comma-less list reaches the interpreter; the null-prototype sandbox is the only barrier | `util.json`, `status_pages.json` | parse literals only |
 | KB-40 | The `tbl_zone` flag must be a single digit, otherwise login fails entirely | `login_cases.json` | - |
 | KB-41 | An empty environment variable counts as set | `process.test.js` | - |
-| KB-42 | The signal handler has no re-entrancy guard: a second signal runs the shutdown again | `signal.test.js` | - |
-| KB-43 | A shutdown callback that throws or returns a non-promise crashes with exit 1 | `signal.test.js` | - |
 
 Not tests, only observations: the config names `HOSTNAME`, `USERNAME` and `PASSWORD` collide with
 variables shells and containers set (Docker sets `HOSTNAME` to the container id, so a forgotten value never

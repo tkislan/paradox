@@ -1,5 +1,5 @@
 {
-  "_comment": "Case tables for src/util.js, plus the signal table of src/signal.js (too small for a file of its own). Rows that pin a defect on purpose (known_bug) are in known_bugs/util.json, in the same groups; rows with js_only depend on JavaScript semantics a port need not copy. A missing or null array in deepArrayEqual means 'no array' (undefined in JS, None in Python). getJsValue rows: content is a string or {file} relative to tests/; pattern is a regex source (JS and Python agree on every pattern here; flags are never needed). Retry rows: attempts is the script of successive calls, throws raises an error with that message, expected.throws is the message of the error that comes out. Expected values of the captured-page rows were extracted independently with Python's re and json.",
+  "_comment": "Case tables for src/util.js. Rows that pin a defect on purpose (known_bug) are in known_bugs/util.json, in the same groups; rows with js_only depend on JavaScript semantics a port need not copy. A missing or null array in deepArrayEqual means 'no array' (undefined in JS, None in Python). getJsValue rows: content is a string or {file} relative to tests/; pattern is a regex source (JS and Python agree on every pattern here; flags are never needed). Retry rows: attempts is the script of successive calls, throws raises an error with that message, expected.throws is the message of the error that comes out. Expected values of the captured-page rows were extracted independently with Python's re and json.",
   "deepArrayEqual": [
     {
       "name": "empty arrays are equal",
@@ -488,23 +488,6 @@
       "name": "the signal table",
       "object": {"SIGHUP": 1, "SIGINT": 2, "SIGTERM": 15},
       "expected": [["SIGHUP", 1], ["SIGINT", 2], ["SIGTERM", 15]]
-    }
-  ],
-  "signals": [
-    {
-      "signal": "SIGHUP",
-      "number": 1,
-      "exit_code": 129
-    },
-    {
-      "signal": "SIGINT",
-      "number": 2,
-      "exit_code": 130
-    },
-    {
-      "signal": "SIGTERM",
-      "number": 15,
-      "exit_code": 143
     }
   ]
 }

@@ -1,5 +1,5 @@
 {
-  "_comment": "State machine of src/status_listener.js and timers of src/keep_alive_worker.js. SCENARIO groups (first_poll, armed_codes, sensor_codes, transitions, zone_indexing, failures): { name, zones, polls, expected_events, known_bug?, note? }. zones are the [enabled, name] tuples handed to statusListener() (already filtered by login(); the listener only uses their count and order). polls has one entry per 1000 ms tick: { statuszone, useraccess } makes the panel serve those tables (status code per zone; area state codes, first entry is area 1; tables have 0 or >= 2 entries because a one-entry table is a JavaScript new Array(n)); { page: { file } } serves that captured page (relative to tests/); { fail } makes the panel misbehave for this tick only: { status: n, body? } HTTP answer with that status (default body: a short error text), { connection: \"refused\" | \"reset\" } transport failure, { page: { file } } HTTP 200 with a page that has no status tables. expected_events lists, in emission order over the whole run: [\"armedChanged\", true | false | null], [\"sensorChanged\", \"<zone index as a decimal string>\", true | false], [\"error\"]. Before the first poll the listener assumes armed = null and every sensor = false; it never announces that state, only differences from it. CADENCE groups (status_poll_cadence, keep_alive_cadence): { name, advance_ms: [...], expected_requests: [...] } advance a fake clock step by step from the creation of the listener or worker and give the cumulative number of requests the panel has seen after each step (status polls: GET /statuslive.html; keep-alives: GET /keep_alive.html?msgid=1). keep_alive_failures: { name, ticks, expected_error_logged } one entry per 3000 ms tick, a { fail } as above or {}, and per tick whether the failure was reported (logged) by the worker. keep_alive_random: what Math.random() returns, and the only request ever sent. Rows with a known_bug (catalog in README.md) are in known_bugs/status_machine.json, in the same groups; zone_indexing and keep_alive_random exist only there.",
+  "_comment": "State machine of src/status_listener.js. SCENARIO groups (first_poll, armed_codes, sensor_codes, transitions, zone_indexing, failures): { name, zones, polls, expected_events, known_bug?, note? }. zones are the [enabled, name] tuples handed to statusListener() (already filtered by login(); the listener only uses their count and order). polls has one entry per 1000 ms tick: { statuszone, useraccess } makes the panel serve those tables (status code per zone; area state codes, first entry is area 1; tables have 0 or >= 2 entries because a one-entry table is a JavaScript new Array(n)); { page: { file } } serves that captured page (relative to tests/); { fail } makes the panel misbehave for this tick only: { status: n, body? } HTTP answer with that status (default body: a short error text), { connection: \"refused\" | \"reset\" } transport failure, { page: { file } } HTTP 200 with a page that has no status tables. expected_events lists, in emission order over the whole run: [\"armedChanged\", true | false | null], [\"sensorChanged\", \"<zone index as a decimal string>\", true | false], [\"error\"]. Before the first poll the listener assumes armed = null and every sensor = false; it never announces that state, only differences from it. CADENCE group (status_poll_cadence): { name, advance_ms: [...], expected_requests: [...] } advance a fake clock step by step from the creation of the listener and give the cumulative number of requests the panel has seen after each step (GET /statuslive.html). Rows with a known_bug (catalog in README.md) are in known_bugs/status_machine.json, in the same groups; zone_indexing exists only there.",
   "first_poll": [
     {
       "name": "armed panel",
@@ -464,50 +464,5 @@
       "expected_requests": [1, 1, 2, 2, 3]
     },
     { "name": "a long jump runs every missed poll", "advance_ms": [5000], "expected_requests": [5] }
-  ],
-  "keep_alive_cadence": [
-    {
-      "name": "no keep-alive at start-up, first one exactly at 3000 ms",
-      "advance_ms": [0, 2999, 1],
-      "expected_requests": [0, 0, 1]
-    },
-    {
-      "name": "one keep-alive per 3000 ms",
-      "advance_ms": [3000, 2999, 1, 3000],
-      "expected_requests": [1, 1, 2, 3]
-    },
-    { "name": "a long jump runs every missed keep-alive", "advance_ms": [15000], "expected_requests": [5] }
-  ],
-  "keep_alive_failures": [
-    {
-      "name": "HTTP 500 is logged and the worker keeps running",
-      "ticks": [{ "fail": { "status": 500 } }, {  }],
-      "expected_error_logged": [true, false]
-    },
-    {
-      "name": "HTTP 404 is logged",
-      "ticks": [{ "fail": { "status": 404 } }],
-      "expected_error_logged": [true]
-    },
-    {
-      "name": "connection refused is logged and the worker keeps running",
-      "ticks": [{ "fail": { "connection": "refused" } }, {  }],
-      "expected_error_logged": [true, false]
-    },
-    {
-      "name": "connection reset is logged and the worker keeps running",
-      "ticks": [{ "fail": { "connection": "reset" } }, {  }],
-      "expected_error_logged": [true, false]
-    },
-    {
-      "name": "every failed keep-alive is logged separately",
-      "ticks": [{ "fail": { "status": 500 } }, { "fail": { "status": 500 } }, { "fail": { "status": 500 } }],
-      "expected_error_logged": [true, true, true]
-    },
-    {
-      "name": "an empty 200 counts as success",
-      "ticks": [{ "fail": { "status": 200, "body": "" } }],
-      "expected_error_logged": [false]
-    }
   ]
 }

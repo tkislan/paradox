@@ -134,14 +134,6 @@ describe('users', () => {
     expect(client.connected).toBe(true);
   });
 
-  it('answers SUBSCRIBE with failure code 128 for a user that may not subscribe', async () => {
-    const broker = await leaseBroker();
-    await broker.addUser({ username: 'mute', password: 'x', subscribe: false });
-    const client = await connect(broker, { username: 'mute', password: 'x' });
-
-    await expect(client.subscribeAsync('paradox/command/arm', { qos: 0 })).rejects.toMatchObject({ packet: { granted: [128] } });
-  });
-
   it('kicks the sessions of a user, who can reconnect afterwards', async () => {
     const broker = await leaseBroker();
     const client = await connect(broker);
@@ -189,14 +181,6 @@ describe('proxy()', () => {
 
     expect(client.connected).toBe(false);
     expect(broker.connects).toEqual([]);
-  });
-
-  it('can answer the first packet with forged bytes and close', async () => {
-    const broker = await leaseBroker();
-    const proxy = await broker.proxy();
-    proxy.replyWith([0x20, 0x02, 0x00, 0x03]);
-
-    await expect(mqtt.connectAsync(url(broker, proxy.port), { protocolVersion: 4, reconnectPeriod: 0 })).rejects.toThrow(/Connection refused: Server unavailable/);
   });
 
   it('can write malformed bytes to a connected client and cut connections', async () => {
