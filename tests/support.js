@@ -32,6 +32,9 @@ export const DEFAULT_ENV = {
 /** Test title of a spec row; rows that pin a bug are announced as "KNOWN BUG KB-n: <name>". */
 export const rowTitle = (row) => `${row.known_bug ? `KNOWN BUG ${row.known_bug}: ` : ''}${row.name ?? row.operation}`;
 
+/** Spec rows -> [title, row] tuples (use with the '%s' name format). */
+export const cases = (rows) => rows.map((row) => [rowTitle(row), row]);
+
 /** Spec rows -> it.each rows that carry a `title` (use with the '$title' name format). */
 export const withTitle = (rows) => rows.map((row) => ({ ...row, title: rowTitle(row) }));
 

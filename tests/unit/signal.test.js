@@ -1,30 +1,6 @@
-import { spawn } from 'node:child_process';
-import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  BUILD_DIR, captureConsole, isolateProcessListeners, loadBridge, loadSpec, onCleanup, settle, spyProcessExit, waitFor,
-} from '../support.js';
-
-const { signals } = loadSpec('util');
-const SIGNAL_NAMES = signals.map(({ signal }) => signal);
-
-function deferred() {
-  const handle = {};
-  handle.promise = new Promise((resolve, reject) => {
-    handle.resolve = resolve;
-    handle.reject = reject;
-  });
-  return handle;
-}
-
-function install(callback) {
-  isolateProcessListeners();
-  const logged = captureConsole();
-  const exit = spyProcessExit();
-  loadBridge().load('signal.js').setupSignalHandler(callback);
-  const exitCodes = () => exit.mock.calls.map((args) => args[0]);
-  return { logged, exit, exitCodes };
-}
+import { loadBridge, settle, waitFor } from '../support.js';
+import { SIGNAL_NAMES, deferred, install, runUntilSignalled, signals } from '../helpers/signal.js';
 
 describe('SIGNALS', () => {
   it('maps the handled signal names to their numbers', () => {
@@ -152,27 +128,6 @@ describe('setupSignalHandler', () => {
 
 describe('with real signals', () => {
   // A real child process and real OS signals; every test above only simulates them with process.emit.
-  const childScript = (shutdown) => `
-    const { setupSignalHandler } = require(${JSON.stringify(path.join(BUILD_DIR, 'signal.js'))});
-    setupSignalHandler(() => ${shutdown});
-    console.log('ready');
-    setInterval(() => {}, 1000);
-  `;
-
-  async function runUntilSignalled(shutdown, signal) {
-    const child = spawn(process.execPath, ['-e', childScript(shutdown)], { stdio: ['ignore', 'pipe', 'pipe'] });
-    onCleanup(() => child.kill('SIGKILL'));
-    const output = { stdout: '', stderr: '' };
-    child.stdout.on('data', (chunk) => { output.stdout += chunk; });
-    child.stderr.on('data', (chunk) => { output.stderr += chunk; });
-    const exited = new Promise((resolve) => child.once('close', (code, killedBy) => resolve({ code, killedBy })));
-
-    await waitFor(() => output.stdout.includes('ready'), { message: 'the child to install its handler' });
-    child.kill(signal);
-    const result = await exited;
-    return { ...result, ...output };
-  }
-
   it.each(signals)('$signal ends the process with exit code $exit_code after the callback resolved', async ({ signal, exit_code: exitCode }) => {
     const result = await runUntilSignalled('new Promise((resolve) => setTimeout(resolve, 50))', signal);
 

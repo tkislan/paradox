@@ -1,51 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { FakePanel } from '../mock_paradox.js';
-import {
-  captureConsole, loadBridge, loadSpec, setBridgeEnv, settle, specText, useFakeClock, waitFor, withTitle,
-} from '../support.js';
-
-const spec = loadSpec('status_pages');
-
-const OPERATIONS = [
-  ['getStatus', '/statuslive.html'],
-  ['sendKeepAlive', '/keep_alive.html'],
-];
-const requestRows = (...operations) => spec.requests.filter((row) => operations.includes(row.operation));
-const httpFailureRows = spec.body_ignoring_responses.filter((row) => 'error' in row.expected);
-
-const html = (body, status = 200, headers = {}) => ({ status, headers: { 'Content-Type': 'text/html', ...headers }, body });
-
-// The panel's tables are eval-ed in a vm context: their arrays have a foreign prototype, and
-// `new Array(n)` has n unset slots. The spec describes both in language-neutral terms.
-const plain = (list) => (list.length > 0 && Object.keys(list).length === 0 ? { empty_slots: list.length } : Array.from(list));
-const plainStatus = (status) => ({
-  ...status,
-  statuszone: plain(status.statuszone),
-  useraccess: plain(status.useraccess),
-  alarms: plain(status.alarms),
-});
-
-async function rejection(promise) {
-  try {
-    await promise;
-  } catch (error) {
-    return error;
-  }
-  throw new Error('expected the promise to reject');
-}
-
-function track(promise) {
-  const outcome = { state: 'pending' };
-  promise.then(() => { outcome.state = 'resolved'; }, () => { outcome.state = 'rejected'; });
-  return outcome;
-}
-
-async function startBridge(panelOptions) {
-  const logs = captureConsole();
-  const panel = await new FakePanel(panelOptions).start();
-  setBridgeEnv({ HOSTNAME: panel.hostname });
-  return { panel, logs, ...loadBridge().load('api/status.js') };
-}
+import { rejection, track } from '../helpers/outcomes.js';
+import { html } from '../helpers/responses.js';
+import { settle, specText, useFakeClock, waitFor, withTitle } from '../support.js';
+import { OPERATIONS, httpFailureRows, plain, plainStatus, requestRows, spec, startBridge } from '../helpers/status.js';
 
 describe('getStatus() page parsing', () => {
   it.each(withTitle(spec.get_status))('$title', async ({ page, expected }) => {
