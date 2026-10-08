@@ -1,18 +1,20 @@
 import { renderLoginPage } from '../mock_paradox.js';
 import { loadSpec } from '../support.js';
 
+// Every scenario waits for a free Mosquitto instance and talks to it over docker's network.
 export const spec = loadSpec('system_scenarios');
 
 export const login = spec.login;
 
 // Loopback round trips take well under a millisecond; this is the window in which unexpected extra effects can still show up.
+// What the broker did is settled separately, by broker.syncLog().
 export const QUIET_MS = 10;
 
 export const WAIT_INTERVAL_MS = 2;
 
-export const MQTT_USERNAME = 'bridge';
+export const REACH_TIMEOUT_MS = 8000;
 
-export const MQTT_PASSWORD = 'secret';
+export const READY_TIMEOUT_MS = 15000;
 
 export const SIGNALS = ['SIGHUP', 'SIGINT', 'SIGTERM'];
 

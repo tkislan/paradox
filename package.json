@@ -27,6 +27,7 @@
     "babel-preset-env": "^1.7.0",
     "flow-bin": "^0.92.1",
     "mqtt-packet": "^9.0.2",
+    "mqtt5": "npm:mqtt@^5.16.0",
     "vitest": "^5.0.3"
   }
 }

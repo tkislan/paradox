@@ -1,0 +1,138 @@
+{
+  "_comment": "Rows of ../util.json that pin a defect of the current code on purpose (known_bug: the catalog id in tests/README.md), moved here unchanged: the same groups and the same row format, which the comment of that file describes. A port does not have to reproduce any of them.",
+  "deepArrayEqual": [
+    {
+      "name": "nested arrays with equal content are not equal",
+      "a": [[1, 2]],
+      "b": [[1, 2]],
+      "expected": false,
+      "known_bug": "KB-6",
+      "note": "Elements are compared with ===, so equal-looking nested arrays differ. Name says deep, behavior is shallow. Never hit in production: all statuses are flat integer arrays."
+    },
+    {
+      "name": "objects with equal content are not equal",
+      "a": [{"a": 1}],
+      "b": [{"a": 1}],
+      "expected": false,
+      "known_bug": "KB-6"
+    }
+  ],
+  "getJsValue": [
+    {
+      "name": "getjsvalue-evals-content: arithmetic in the match is computed, not parsed as a literal",
+      "content": "x=1+2",
+      "pattern": "x=(.*)",
+      "known_bug": "KB-39",
+      "js_only": true,
+      "note": "The matched text is executed as JavaScript (vm), not parsed as a literal. A port should parse array/number/string literals only.",
+      "expected": 3
+    }
+  ],
+  "iterateTuples": [
+    {
+      "name": "2 pairs (4 items) yield only 1",
+      "list": [1, "A", 0, "B"],
+      "expected": [[1, "A"]],
+      "known_bug": "KB-1",
+      "note": "A correct version yields all 2 pairs."
+    },
+    {
+      "name": "3 pairs (6 items) yield only 2",
+      "list": [1, "A", 0, "B", 1, "C"],
+      "expected": [[1, "A"], [0, "B"]],
+      "known_bug": "KB-1",
+      "note": "A correct version yields all 3 pairs."
+    },
+    {
+      "name": "4 pairs (8 items) yield only 2",
+      "list": [1, "A", 0, "B", 1, "C", 0, "D"],
+      "expected": [[1, "A"], [0, "B"]],
+      "known_bug": "KB-1",
+      "note": "A correct version yields all 4 pairs."
+    },
+    {
+      "name": "5 pairs (10 items) yield only 3",
+      "list": [1, "A", 0, "B", 1, "C", 0, "D", 1, "E"],
+      "expected": [[1, "A"], [0, "B"], [1, "C"]],
+      "known_bug": "KB-1",
+      "note": "A correct version yields all 5 pairs."
+    },
+    {
+      "name": "6 pairs (12 items) yield only 3",
+      "list": [1, "A", 0, "B", 1, "C", 0, "D", 1, "E", 0, "F"],
+      "expected": [[1, "A"], [0, "B"], [1, "C"]],
+      "known_bug": "KB-1",
+      "note": "A correct version yields all 6 pairs."
+    },
+    {
+      "name": "7 pairs (14 items) yield only 4",
+      "list": [1, "A", 0, "B", 1, "C", 0, "D", 1, "E", 0, "F", 1, "G"],
+      "expected": [[1, "A"], [0, "B"], [1, "C"], [0, "D"]],
+      "known_bug": "KB-1",
+      "note": "A correct version yields all 7 pairs."
+    },
+    {
+      "name": "8 pairs (16 items) yield only 4",
+      "list": [1, "A", 0, "B", 1, "C", 0, "D", 1, "E", 0, "F", 1, "G", 0, "H"],
+      "expected": [[1, "A"], [0, "B"], [1, "C"], [0, "D"]],
+      "known_bug": "KB-1",
+      "note": "A correct version yields all 8 pairs."
+    },
+    {
+      "name": "32 enabled zones: zones 17 to 32 are never seen",
+      "list": [
+        1, "Z1", 1, "Z2", 1, "Z3", 1, "Z4", 1, "Z5", 1, "Z6", 1, "Z7", 1, "Z8", 1, "Z9", 1, "Z10", 1, "Z11", 1,
+        "Z12", 1, "Z13", 1, "Z14", 1, "Z15", 1, "Z16", 1, "Z17", 1, "Z18", 1, "Z19", 1, "Z20", 1, "Z21", 1, "Z22", 1,
+        "Z23", 1, "Z24", 1, "Z25", 1, "Z26", 1, "Z27", 1, "Z28", 1, "Z29", 1, "Z30", 1, "Z31", 1, "Z32"
+      ],
+      "expected": [
+        [1, "Z1"],
+        [1, "Z2"],
+        [1, "Z3"],
+        [1, "Z4"],
+        [1, "Z5"],
+        [1, "Z6"],
+        [1, "Z7"],
+        [1, "Z8"],
+        [1, "Z9"],
+        [1, "Z10"],
+        [1, "Z11"],
+        [1, "Z12"],
+        [1, "Z13"],
+        [1, "Z14"],
+        [1, "Z15"],
+        [1, "Z16"]
+      ],
+      "known_bug": "KB-1",
+      "note": "A correct version yields all 32 pairs."
+    },
+    {
+      "name": "captured index page: 32 zone slots yield only 16 pairs, which still include all six enabled zones",
+      "list": [
+        1, "Predsien", 1, "Lava izba", 1, "Prava izba", 1, "Spalna", 1, "Obyvacka", 1, "Chodba", 0, " ", 0, " ", 0,
+        " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ",
+        0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " "
+      ],
+      "expected": [
+        [1, "Predsien"],
+        [1, "Lava izba"],
+        [1, "Prava izba"],
+        [1, "Spalna"],
+        [1, "Obyvacka"],
+        [1, "Chodba"],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "]
+      ],
+      "note": "The slots after the 16th are all disabled on this panel, so the data loss only shows with more than 16 zones. A correct version yields all 32 pairs.",
+      "known_bug": "KB-1"
+    }
+  ]
+}

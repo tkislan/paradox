@@ -1,0 +1,99 @@
+{
+  "_comment": "Rows of ../status_pages.json that pin a defect of the current code on purpose (known_bug: the catalog id in tests/README.md), moved here unchanged: the same groups and the same row format, which the comment of that file describes. A port does not have to reproduce any of them.",
+  "get_status": [
+    {
+      "name": "a single-value zone table becomes that many empty slots",
+      "page": "tbl_statuszone = new Array(7);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
+      "expected": {
+        "statuszone": { "empty_slots": 7 },
+        "useraccess": [1, 0],
+        "alarms": [0]
+      },
+      "known_bug": "KB-23",
+      "note": "The value is eval-ed as new Array(7), the JavaScript length constructor, not as a one-element list."
+    },
+    {
+      "name": "a single-value useraccess table becomes that many empty slots",
+      "page": "tbl_statuszone = new Array(0,0);var stayd=\"0\";tbl_useraccess = new Array(2);",
+      "expected": {
+        "statuszone": [0, 0],
+        "useraccess": { "empty_slots": 2 },
+        "alarms": [0]
+      },
+      "known_bug": "KB-23",
+      "note": "A panel with a one-entry useraccess table would therefore read as \"armed state unknown\"."
+    },
+    {
+      "name": "a single zero value becomes an empty list",
+      "page": "tbl_statuszone = new Array(0);var stayd=\"0\";tbl_useraccess = new Array(0);",
+      "expected": { "statuszone": [], "useraccess": [], "alarms": [0] },
+      "known_bug": "KB-23"
+    },
+    {
+      "name": "a single value of 2^32 or more fails with the engine error instead of the regex error",
+      "page": "tbl_statuszone = new Array(4294967296);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
+      "expected": { "error": "Invalid array length" },
+      "known_bug": "KB-23"
+    },
+    {
+      "name": "values with a leading zero are read as octal",
+      "page": "tbl_statuszone = new Array(010,011);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
+      "expected": { "statuszone": [8, 9], "useraccess": [1, 0], "alarms": [0] },
+      "known_bug": "KB-39",
+      "note": "The value is eval-ed as JavaScript source, where 010 is octal 8; a port that parses decimal integers reads 10 and 11. The panel is not known to pad numbers with zeros."
+    },
+    {
+      "name": "tbl_alarmes entries are ignored and alarms is always [0]",
+      "page": "tbl_statuszone = new Array(1,0);var stayd=\"0\";tbl_useraccess = new Array(2,0);tbl_alarmes = new Array(\"3\",\"4\");tbl_troubles = new Array(\"16\",\"19\");",
+      "expected": { "statuszone": [1, 0], "useraccess": [2, 0], "alarms": [0] },
+      "known_bug": "KB-15"
+    },
+    {
+      "name": "login page served after the session expired is an error",
+      "page": { "file": "data/login_page.html" },
+      "expected": { "error": "Regex didn't match the value" },
+      "known_bug": "KB-12",
+      "note": "The panel answers an expired session with HTTP 200 and the login page; the only symptom is the parse error."
+    }
+  ],
+  "requests": [
+    {
+      "operation": "sendKeepAlive",
+      "request": "GET /keep_alive.html?msgid=1",
+      "known_bug": "KB-9",
+      "absent_headers": ["referer", "cookie", "authorization"],
+      "note": "The random cache-buster the code computes is dropped by the HTTP client (null parameter value) and never reaches the wire."
+    },
+    {
+      "operation": "arm",
+      "request": "GET /statuslive.html?area=00&value=r",
+      "known_bug": "KB-18",
+      "absent_headers": ["referer", "cookie", "authorization"],
+      "note": "area is always 00 although the panel has two areas."
+    },
+    {
+      "operation": "disarm",
+      "request": "GET /statuslive.html?area=00&value=d",
+      "known_bug": "KB-18",
+      "absent_headers": ["referer", "cookie", "authorization"],
+      "note": "area is always 00 although the panel has two areas."
+    }
+  ],
+  "body_ignoring_responses": [
+    {
+      "name": "unrelated text is success",
+      "response": { "status": 200, "body": "command refused" },
+      "expected": { "result": null },
+      "known_bug": "KB-14"
+    },
+    {
+      "name": "the login page (expired session) is success",
+      "response": {
+        "status": 200,
+        "body": { "file": "data/login_page.html" }
+      },
+      "expected": { "result": null },
+      "known_bug": "KB-14"
+    }
+  ]
+}
