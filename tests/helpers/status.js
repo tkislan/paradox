@@ -1,8 +1,11 @@
+import { createRequire } from 'node:module';
 import { expect } from 'vitest';
 import { FakePanel } from '../mock_paradox.js';
-import { captureConsole, loadBridge, loadSpec, setBridgeEnv, specText } from '../support.js';
+import { captureConsole, loadSpec, setBridgeEnv, specText } from '../support.js';
 import { rejection } from './outcomes.js';
 import { html } from './responses.js';
+
+const require = createRequire(import.meta.url);
 
 export const spec = loadSpec('status_pages');
 
@@ -30,7 +33,7 @@ export async function startBridge(panelOptions) {
   const logs = captureConsole();
   const panel = await new FakePanel(panelOptions).start();
   setBridgeEnv({ HOSTNAME: panel.hostname });
-  return { panel, logs, ...loadBridge().load('api/status.js') };
+  return { panel, logs, ...require('../../src/api/status.js') };
 }
 
 export async function expectParsedStatus({ page, expected }) {

@@ -10,7 +10,7 @@ From the repository root (vitest is a dev dependency of the root project; Node 2
 ```sh
 nvm use
 npm ci
-npm test           # starts the Mosquitto brokers, builds src/ with the repo's Babel, runs vitest with v8 coverage
+npm test           # starts the Mosquitto brokers, runs vitest with v8 coverage
 npx vitest run unit/util   # a subset: file name filters work from the root
 ```
 
@@ -24,21 +24,23 @@ About 730 tests, 50 s. `npx vitest run --exclude 'tests/known_bugs/**'` skips th
 environments vitest may pick a reporter that hides console output; use `npx vitest run --reporter=default` to see
 whether a change made the suite noisy (it must stay silent).
 
-`npm test` first compiles `src/` to `tests/.build/` (the same Babel output `npm run build` ships, plus
-source maps so coverage maps back onto `src/`). The bridge under test `require`s axios, express and mqtt
-from the root `node_modules`, i.e. the versions production installs.
+Tests load `src/` itself, through Node's own module loader (`vitest.config.mjs` hands `src/` to Node rather than
+to vitest's loader). Modules without load-time state (`paradox.js`, `util.js`) are imported at the top of a test
+file. The others are `require`d inside the test, after `setBridgeEnv()`: `config.js` reads the environment once
+when it loads, and most tests point the bridge at their own fake panel. `support.js` empties Node's module cache
+for `src/` after every test. The bridge `require`s axios, express and mqtt from the root `node_modules`, i.e. the
+versions production installs.
 
-Set `PARADOX_BUILD_DIR=<absolute path>` to run against an existing build directory without rebuilding
-(parallel runs, mutation checks). Set `PARADOX_NODE=<path to a node binary>` to run the child-process tests
+Set `PARADOX_NODE=<path to a node binary>` to run the child-process tests
 (`system/process.test.js`) on another runtime, e.g. an older Node line:
 `PARADOX_NODE=$HOME/.nvm/versions/node/v22.23.3/bin/node npx vitest run system/process`.
 
 ## Coverage
 
 98.2 % of lines, 97.7 % of branches. Dead code in `src/` is not covered: the `default:` case of the sensor handler
-(`app.js:43`, the value is always a boolean) and `initSensorStatus` (`status_listener.js:26-28`, never called).
+(`app.js:43`, the value is always a boolean) and `initSensorStatus` (`status_listener.js:32-34`, never called).
 Deliberately without a test: the `playground.js` script and the shutdown-callback rejection path of `signal.js`
-(lines 23-24). `config.js`, `mqtt_link.js`, `keep_alive_worker.js` and `signal.js` have no tests of their own, because
+(lines 24-25). `config.js`, `mqtt_link.js`, `keep_alive_worker.js` and `signal.js` have no tests of their own, because
 the Python port does not need them; the system tests only run them, so they show as covered even where no assertion
 would notice a changed value.
 `system/process.test.js` runs the bridge as a child process, which vitest's coverage cannot see; it adds
@@ -53,7 +55,7 @@ evidence about exit codes and real signals, not coverage numbers.
 | `data/*.html` | Real pages captured from a panel. Spec files reference them by path. |
 | `mock_paradox.js` | Fake panel: the HTTP contract the bridge needs, as a pure `handle()` plus a loopback server. |
 | `docker-compose.yml`, `mosquitto/mosquitto.conf`, `mosquitto.js` | Real Mosquitto brokers as test fixtures: lease, observation, users, TCP proxy for faults (see "MQTT tests" below). |
-| `support.js` | Loader for the built bridge, env, console/exit/signal/timer helpers. |
+| `support.js` | Env, the per-test reset of `src/` modules, console/exit/signal/timer helpers. |
 | `helpers/`, `fixtures/` | Everything that is not a test case. `helpers/<area>.js` holds the code a test file needs (world builders, request/outcome assertions, scenario interpreters, small constants) and `fixtures/<area>.js` the scenario tables and shared data (`fixtures/known_bugs/` the ones only the known-bug tests use). Test files import from them and contain only `describe`/`it`. |
 | `unit/` | One module at a time, driven by `spec/` tables where the cases are data. |
 | `wire/` | `api/*` against the fake panel; assertions on the requests it receives and on what the calls return. |
@@ -81,7 +83,8 @@ evidence about exit codes and real signals, not coverage numbers.
 - **Time**: the bridge's own timers (1 s poll, 3 s keep-alive, 5 s MQTT connect timeout) run on a fake clock
   (`useFakeClock`); sockets are real. Wait for effects with `waitFor`; `settle()` is only for "nothing
   happened" assertions, and with a broker only after `broker.syncLog()` (the broker log lags the connection).
-- **Isolation**: `setBridgeEnv()` before `loadBridge()` (config.js reads the environment once at require time).
+- **Isolation**: `setBridgeEnv()` before `require`-ing a module from `src/` (config.js reads the environment once at
+  require time); each test gets fresh `src/` modules.
   Harness objects register their own cleanup; process signal listeners need `isolateProcessListeners()`.
 
 ## MQTT tests: real Mosquitto
@@ -100,7 +103,7 @@ afterwards. Mosquitto reports less than a hand-written fake could, so the harnes
 | Faults Mosquitto cannot produce (refused or silent connections, malformed bytes, cut sockets) | `broker.proxy()`: a TCP relay in front of the broker with `stop()`/`start(port)`, `blackhole()`, `inject(bytes)`, `dropConnections()`, `accepted`, `connects` |
 
 The harness's own MQTT client (the `mqtt5` alias of `mqtt@5`) has no keepalive or reconnect timers, so the fake clock
-cannot freeze it. It must not be installed under the name `mqtt`: the compiled bridge resolves `mqtt` and would
+cannot freeze it. It must not be installed under the name `mqtt`: the bridge resolves `mqtt` and would
 silently run against v5 instead of the production 2.18.8. Nothing guards this.
 `vitest -t` matches only the first 40 characters of a `$title` test name.
 
@@ -129,9 +132,9 @@ projects), then the parsing tables (`status_pages`, `login_cases`), then `status
 A test is only worth keeping if a realistic bug breaks it. To check by hand:
 
 ```sh
-cp -r tests/.build tests/.mutants/m1          # .mutants/ is git-ignored; it must live inside the repo so axios etc. resolve
-$EDITOR tests/.mutants/m1/util.js             # flip a branch, change a constant, drop a statement
-PARADOX_KEEP_BROKERS=1 PARADOX_BUILD_DIR=$PWD/tests/.mutants/m1 npx vitest run unit/util   # must fail
+$EDITOR src/util.js                              # flip a branch, change a constant, drop a statement
+PARADOX_KEEP_BROKERS=1 npx vitest run unit/util   # must fail
+git restore src/util.js
 ```
 
 ## Known bugs and quirks (pinned)

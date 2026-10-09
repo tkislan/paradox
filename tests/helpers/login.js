@@ -1,6 +1,9 @@
+import { createRequire } from 'node:module';
 import { expect } from 'vitest';
 import { FakePanel, renderIndexPage } from '../mock_paradox.js';
-import { captureConsole, loadBridge, loadSpec, setBridgeEnv, specText } from '../support.js';
+import { captureConsole, loadSpec, setBridgeEnv, specText } from '../support.js';
+
+const require = createRequire(import.meta.url);
 
 export const crypto = loadSpec('crypto');
 
@@ -49,7 +52,7 @@ export async function startBridge({ responses = {}, panelOptions = {}, env = {} 
   }).start();
   setBridgeEnv({ HOSTNAME: panel.hostname, USERNAME: golden.username, PASSWORD: golden.password, ...env });
   applyResponses(panel, responses);
-  return { panel, output, ...loadBridge().load('api/login.js') };
+  return { panel, output, ...require('../../src/api/login.js') };
 }
 
 export const outcomeOf = (promise) => promise.then((value) => ({ value }), (error) => ({ error }));

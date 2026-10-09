@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import { deepArrayEqual, getJsValue, retry } from '../../src/util.js';
 import { cases, loadKnownBugSpec, useFakeClock, waitFor } from '../support.js';
-import { expectDeepArrayEqual, expectJsValue, expectTuples, loadUtil } from '../helpers/util.js';
+import { expectDeepArrayEqual, expectJsValue, expectTuples } from '../helpers/util.js';
 
 const spec = loadKnownBugSpec('util');
 
@@ -8,7 +9,6 @@ describe('deepArrayEqual', () => {
   it.each(cases(spec.deepArrayEqual))('%s', (_title, row) => expectDeepArrayEqual(row));
 
   it('KNOWN BUG KB-6: nested arrays are equal only when they are the very same object', () => {
-    const { deepArrayEqual } = loadUtil();
     const inner = [1];
 
     expect(deepArrayEqual([inner], [inner])).toBe(true);
@@ -16,7 +16,6 @@ describe('deepArrayEqual', () => {
   });
 
   it('KNOWN BUG KB-6: NaN elements are never equal, not even in the same array', () => {
-    const { deepArrayEqual } = loadUtil();
     const withNaN = [1, NaN];
 
     expect(deepArrayEqual(withNaN, withNaN)).toBe(false);
@@ -28,7 +27,6 @@ describe('getJsValue', () => {
   it.each(cases(spec.getJsValue))('%s', (_title, row) => expectJsValue(row));
 
   it('KNOWN BUG KB-23: `new Array(7)` is seven empty slots, not [7]', () => {
-    const { getJsValue } = loadUtil();
 
     const value = getJsValue('x=new Array(7)', /x=(.*)/);
 
@@ -46,7 +44,6 @@ describe('iterateTuples', () => {
 describe('retry', () => {
   it('KNOWN BUG KB-5: retries run back to back, the wait time is never used', async () => {
     useFakeClock();
-    const { retry } = loadUtil();
     const pendingTimersAtCall = [];
     const f = vi.fn(async () => {
       pendingTimersAtCall.push(vi.getTimerCount());

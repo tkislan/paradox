@@ -1,24 +1,17 @@
 import { expect } from 'vitest';
-import { loadBridge, specText } from '../support.js';
-
-export const loadUtil = () => loadBridge().load('util.js');
+import { deepArrayEqual, getJsValue, iterateTuples } from '../../src/util.js';
+import { specText } from '../support.js';
 
 export function expectDeepArrayEqual({ a, b, expected }) {
-  const { deepArrayEqual } = loadUtil();
-
   expect(deepArrayEqual(a, b)).toBe(expected);
 }
 
 export function expectJsValue({ content, pattern, expected }) {
-  const { getJsValue } = loadUtil();
-
   // toEqual, not toStrictEqual: the array is built in the vm's own realm.
   expect(getJsValue(specText(content), new RegExp(pattern))).toEqual(expected);
 }
 
 export function expectTuples({ list, expected }) {
-  const { iterateTuples } = loadUtil();
-
   expect(Array.from(iterateTuples(list))).toEqual(expected);
 }
 

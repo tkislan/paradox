@@ -1,18 +1,19 @@
 import http from 'node:http';
 import { createRequire } from 'node:module';
 import net from 'node:net';
-import path from 'node:path';
 import mqttPacket from 'mqtt-packet';
 import { expect, vi } from 'vitest';
 import { FakePanel } from '../mock_paradox.js';
 import { leaseBroker } from '../mosquitto.js';
 import {
-  BUILD_DIR, captureConsole, isolateProcessListeners, loadBridge, onCleanup, reservePort, setBridgeEnv, settle,
+  captureConsole, isolateProcessListeners, onCleanup, reservePort, setBridgeEnv, settle,
   specText, spyProcessExit, useFakeClock, waitFor,
 } from '../support.js';
 import {
   FAULTS, QUIET_MS, REACH_TIMEOUT_MS, READY_TIMEOUT_MS, SIGNALS, WAIT_INTERVAL_MS, login,
 } from '../fixtures/app.js';
+
+const require = createRequire(import.meta.url);
 
 vi.setConfig({ testTimeout: 90000 });
 
@@ -61,7 +62,7 @@ export function captureProcessEvent(event, seen = []) {
  * collected to be ended by the test. mqtt_link.js calls `mqtt.connect` through the module object, which makes this possible.
  */
 function collectBridgeMqttClients() {
-  const mqtt = createRequire(path.join(BUILD_DIR, 'app.js'))('mqtt');
+  const mqtt = require('mqtt');
   const connect = mqtt.connect;
   const clients = [];
   mqtt.connect = function connectAndRemember(...args) {
@@ -135,7 +136,7 @@ export async function createBridge({ panel: panelSpec = {}, broker: brokerSpec =
     seen: { published: 0, brokerPublishes: 0, requests: 0, exits: 0, errors: 0 },
     lastRest: null,
     hungRequests: (panelSpec.faults ?? []).some((fault) => fault.kind === 'hang'),
-    load: () => loadBridge().load('app.js'),
+    load: () => require('../../src/app.js'),
     signal: (name) => bridgeHandlers(name).forEach((handler) => handler(name)),
     rest: (call) => request(port, call),
     // CONNECT packets sent to the broker: Mosquitto answers every one (CONNACK 5 for a failed login, which its log

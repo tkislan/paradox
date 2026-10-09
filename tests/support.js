@@ -8,10 +8,7 @@ import { afterEach, vi } from 'vitest';
 
 const TESTS_DIR = path.dirname(fileURLToPath(import.meta.url));
 
-// PARADOX_BUILD_DIR points the suite at a mutated copy of the build (see README, "Mutation checks").
-export const BUILD_DIR = process.env.PARADOX_BUILD_DIR
-  ? path.resolve(process.env.PARADOX_BUILD_DIR)
-  : path.join(TESTS_DIR, '..', 'src');
+export const SRC_DIR = path.join(TESTS_DIR, '..', 'src');
 
 const nodeRequire = createRequire(import.meta.url);
 
@@ -58,19 +55,18 @@ export function onCleanup(fn) {
   cleanups.push(fn);
 }
 
+// config.js reads the environment once at load, so every test needs src/ loaded afresh. vi.resetModules() cannot do
+// this: it reloads only the file a test imports, while the require() calls inside src/ go to Node's own cache.
 afterEach(async () => {
   while (cleanups.length) await cleanups.pop()();
-});
-
-function clearBuildCache() {
   for (const file of Object.keys(nodeRequire.cache)) {
-    if (file.startsWith(BUILD_DIR)) delete nodeRequire.cache[file];
+    if (file.startsWith(SRC_DIR + path.sep)) delete nodeRequire.cache[file];
   }
-}
+});
 
 /**
  * Sets process.env for the bridge for the duration of the test. config.js reads the environment once
- * at require time, so set this BEFORE loading any module. A value of `undefined` unsets the variable.
+ * at require time, so set this BEFORE requiring any module from src/. A value of `undefined` unsets the variable.
  * Returns the effective env.
  */
 export function setBridgeEnv(overrides = {}) {
@@ -85,20 +81,6 @@ export function setBridgeEnv(overrides = {}) {
     else process.env[key] = String(value);
   }
   return env;
-}
-
-/**
- * Loads modules of the built bridge (the Babel output of src/) from an empty module cache, so each
- * test sees fresh module state and a fresh config.js. Modules loaded through the same `loadBridge`
- * result share instances; call `loadBridge` again for a clean slate.
- *
- *   const { load } = loadBridge();
- *   const { getStatus } = load('api/status.js');
- */
-export function loadBridge() {
-  clearBuildCache();
-  onCleanup(clearBuildCache);
-  return { load: (relativePath) => nodeRequire(path.join(BUILD_DIR, relativePath)) };
 }
 
 /** Silences and records console output of the code under test. Returns { log, warn, error } call lists. */

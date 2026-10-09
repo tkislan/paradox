@@ -1,12 +1,15 @@
 import { EventEmitter } from 'node:events';
+import { createRequire } from 'node:module';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  captureConsole, loadBridge, loadKnownBugSpec, setBridgeEnv, useFakeClock, waitFor, withTitle,
+  captureConsole, loadKnownBugSpec, setBridgeEnv, useFakeClock, waitFor, withTitle,
 } from '../support.js';
 import { holdNextResponse, injectFailure } from '../helpers/panel_faults.js';
 import {
   POLL, POLL_LINE, ZONES, boot, bootLoggedIn, captureIntervals, expectPollEvents, startListener,
 } from '../helpers/status_listener.js';
+
+const require = createRequire(import.meta.url);
 
 const spec = loadKnownBugSpec('status_machine');
 
@@ -23,7 +26,7 @@ describe('statusListener()', () => {
     captureConsole();
     setBridgeEnv();
     useFakeClock();
-    const { statusListener } = loadBridge().load('status_listener.js');
+    const { statusListener } = require('../../src/status_listener.js');
     const emit = vi.spyOn(EventEmitter.prototype, 'emit');
 
     statusListener([[1, 'A'], [1, 'B']]);
@@ -39,8 +42,8 @@ describe('statusListener()', () => {
 
 describe('failed polls', () => {
   it('KNOWN BUG KB-12: once the session has expired every poll fails and nothing logs in again', async () => {
-    const { panel, bridge, watch, tick } = await bootLoggedIn();
-    const { zoneTuples } = await bridge.load('api/login.js').login();
+    const { panel, watch, tick } = await bootLoggedIn();
+    const { zoneTuples } = await require('../../src/api/login.js').login();
     const { events, errors } = watch(zoneTuples);
     await tick();
     expect(events).toEqual([['armedChanged', false]]);
@@ -168,8 +171,8 @@ describe('exceptions inside a poll', () => {
 
 describe('with the real login()', () => {
   it('KNOWN BUG KB-2: a disabled zone before an enabled one shifts which status slot a sensor reads', async () => {
-    const { panel, bridge, watch, tick } = await bootLoggedIn({ zones: [[1, 'Door'], [0, ' '], [1, 'Hall']] });
-    const { zoneTuples } = await bridge.load('api/login.js').login();
+    const { panel, watch, tick } = await bootLoggedIn({ zones: [[1, 'Door'], [0, ' '], [1, 'Hall']] });
+    const { zoneTuples } = await require('../../src/api/login.js').login();
     expect(zoneTuples).toEqual([[1, 'Door'], [1, 'Hall']]);
     const { events } = watch(zoneTuples);
 

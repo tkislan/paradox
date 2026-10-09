@@ -5,7 +5,7 @@ import path from 'node:path';
 import { expect } from 'vitest';
 import { ARMED, DISARMED, FakePanel, renderStatusPage } from '../mock_paradox.js';
 import { leaseBroker } from '../mosquitto.js';
-import { BUILD_DIR, onCleanup, reservePort, waitFor } from '../support.js';
+import { SRC_DIR, onCleanup, reservePort, waitFor } from '../support.js';
 import { HTML, MQTT_CREDENTIALS, NOT_AUTHORIZED, golden, mqtt, panelAccepting } from '../fixtures/process.js';
 
 /*
@@ -28,7 +28,7 @@ const NODE = process.env.PARADOX_NODE || process.execPath;
 
 export const NODE_MAJOR = Number(execFileSync(NODE, ['-p', 'process.versions.node.split(".")[0]'], { encoding: 'utf8' }));
 
-const APP = path.join(BUILD_DIR, 'app.js');
+const APP = path.join(SRC_DIR, 'app.js');
 
 const liveBridges = new Set();
 

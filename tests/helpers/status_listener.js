@@ -1,9 +1,12 @@
+import { createRequire } from 'node:module';
 import { expect, vi } from 'vitest';
 import { FakePanel } from '../mock_paradox.js';
 import {
-  captureConsole, loadBridge, loadSpec, onCleanup, setBridgeEnv, settle, useFakeClock, waitFor,
+  captureConsole, loadSpec, onCleanup, setBridgeEnv, settle, useFakeClock, waitFor,
 } from '../support.js';
 import { drain, injectFailure, servePage } from './panel_faults.js';
+
+const require = createRequire(import.meta.url);
 
 const golden = loadSpec('crypto').credentials[0];
 
@@ -22,8 +25,7 @@ export async function boot(panelOptions = {}, env = {}) {
   const panel = await new FakePanel(panelOptions).start();
   setBridgeEnv({ HOSTNAME: panel.hostname, ...env });
   const clock = useFakeClock();
-  const bridge = loadBridge();
-  const { statusListener } = bridge.load('status_listener.js');
+  const { statusListener } = require('../../src/status_listener.js');
   const watchers = [];
 
   const watch = (zones) => {
@@ -48,7 +50,7 @@ export async function boot(panelOptions = {}, env = {}) {
     await drain();
   };
 
-  return { panel, clock, logs, bridge, statusListener, watch, tick };
+  return { panel, clock, logs, statusListener, watch, tick };
 }
 
 /**
