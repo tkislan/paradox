@@ -1,0 +1,14 @@
+{
+  // Type-checks the plain JavaScript in src/ through its JSDoc types; nothing is compiled.
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    // Unannotated parameters stay allowed, as they were under Flow.
+    "noImplicitAny": false,
+    "module": "nodenext",
+    "types": ["node"]
+  },
+  "include": ["src"]
+}

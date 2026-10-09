@@ -1,4 +1,4 @@
-// @flow
+'use strict';
 
 const EventEmitter = require('events');
 
@@ -10,8 +10,10 @@ const ARMED_STATUS = 2;
 const ARMING_STATUS = 7;
 
 
-function isArmed(useraccess?: number[]) {
+/** @param {number[]} [useraccess] */
+function isArmed(useraccess) {
   if (!useraccess) return null;
+  // @ts-expect-error parseInt stringifies the array ("2,1" -> 2), so only the first area counts.
   switch (parseInt(useraccess, 10)) {
     case ARMED_STATUS:
     case ARMING_STATUS:
@@ -23,15 +25,25 @@ function isArmed(useraccess?: number[]) {
   }
 }
 
-function initSensorStatus(zoneTuples: Array<[number, string]>): { [string]: boolean } {
+/**
+ * @param {Array<[number, string]>} zoneTuples
+ * @returns {{ [key: string]: boolean }}
+ */
+function initSensorStatus(zoneTuples) {
   return zoneTuples.reduce((acc, value, index) => ({ ...acc, [`${index}`]: null }), {});
 }
 
-function getSensorStatus(zoneTuples: Array<[number, string]>, statuszone: number[] = []): { [string]: boolean } {
+/**
+ * @param {Array<[number, string]>} zoneTuples
+ * @param {number[]} [statuszone]
+ * @returns {{ [key: string]: boolean }}
+ */
+function getSensorStatus(zoneTuples, statuszone = []) {
   return zoneTuples.reduce((acc, value, index) => ({ ...acc, [`${index}`]: statuszone[index] === 1 }), {});
 }
 
-function statusListener(zoneTuples: Array<[number, string]>) {
+/** @param {Array<[number, string]>} zoneTuples */
+function statusListener(zoneTuples) {
   class StatusEventEmitter extends EventEmitter {}
 
   const statusEventEmitter = new StatusEventEmitter();
@@ -83,7 +95,7 @@ function statusListener(zoneTuples: Array<[number, string]>) {
   }, 1000);
 
   return {
-    on: (...args: any[]) => statusEventEmitter.on(...args),
+    on: /** @param {[string | symbol, (...args: any[]) => void]} args */ (...args) => statusEventEmitter.on(...args),
     stop: () => {
       clearInterval(intervalId);
       statusEventEmitter.removeAllListeners();

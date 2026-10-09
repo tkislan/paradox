@@ -1,4 +1,4 @@
-// @flow
+'use strict';
 
 const { objectEntries } = require('./util');
 
@@ -9,7 +9,8 @@ const SIGNALS = {
 };
 
 
-function setupSignalHandler(cb: () => Promise<any>) {
+/** @param {() => Promise<any>} cb */
+function setupSignalHandler(cb) {
   objectEntries(SIGNALS).forEach(([signal, code]) => {
     const exit = () => {
       process.exit(128 + code);

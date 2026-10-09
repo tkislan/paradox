@@ -1,6 +1,6 @@
-// @flow
+'use strict';
 
-const axios = require('axios');
+const axios = require('axios').default;
 
 const { HOSTNAME } = require('../config');
 

@@ -24,7 +24,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      # Compiles src/ and runs the tests with coverage.
+      - run: npm run typecheck
       - run: npm test
 
   # Builds the multi-platform image on every run, so a pull request proves that it builds and then throws the result
@@ -57,8 +57,7 @@ jobs:
             latest=false
           tags: |
             type=raw,value=1.0.${{ github.run_number }}
-      # The Dockerfile type-checks (flow) and compiles the sources, so a failing build is a failing check.
-      # No emulation needed: the stages that run commands are pinned to amd64, the final stage only copies.
+      # No emulation needed: the stage that runs commands is pinned to amd64, the final stage only copies.
       - name: Build, and push on master
         uses: docker/build-push-action@v7
         with:

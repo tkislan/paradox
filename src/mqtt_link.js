@@ -1,4 +1,4 @@
-// @flow
+'use strict';
 
 const mqtt = require('mqtt');
 
@@ -17,6 +17,7 @@ function getClient() {
 
     client.on('connect', () => {
       clearTimeout(timeoutId);
+      // @ts-expect-error An array is not an event name, so this removes nothing; kept to preserve behavior.
       client.removeAllListeners(['connect', 'error']);
       console.log('MQTT client connected');
 
@@ -27,6 +28,7 @@ function getClient() {
     });
     client.on('error', (error) => {
       clearTimeout(timeoutId);
+      // @ts-expect-error An array is not an event name, so this removes nothing; kept to preserve behavior.
       client.removeAllListeners(['connect', 'error']);
       console.error(error);
       reject(error);
@@ -58,7 +60,12 @@ async function createMqttLink() {
   });
 
   return {
-    publish: (topic: string, message: any, options?: Object) => { console.log('publish', topic, message); client.publish(topic, message, options) },
+    /**
+     * @param {string} topic
+     * @param {any} message
+     * @param {Object} [options]
+     */
+    publish: (topic, message, options) => { console.log('publish', topic, message); client.publish(topic, message, options) },
   };
 }
 

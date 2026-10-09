@@ -1,12 +1,21 @@
-// @flow
+'use strict';
 
 const vm = require('vm');
 
-function sleep(ms: number): Promise<void> {
+/**
+ * @param {number} ms
+ * @returns {Promise<void>}
+ */
+function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function deepArrayEqual(a?: any[], b?: any[]): boolean {
+/**
+ * @param {any[]} [a]
+ * @param {any[]} [b]
+ * @returns {boolean}
+ */
+function deepArrayEqual(a, b) {
   if (!a || !b || a.length !== b.length) return false;
 
   for (let i = 0; i < a.length; i++) {
@@ -15,7 +24,12 @@ function deepArrayEqual(a?: any[], b?: any[]): boolean {
   return true;
 }
 
-function getJsValue(content: string, regexp: RegExp): any {
+/**
+ * @param {string} content
+ * @param {RegExp} regexp
+ * @returns {any}
+ */
+function getJsValue(content, regexp) {
   const match = regexp.exec(content);
   if (!match) {
     console.error(content);
@@ -27,12 +41,17 @@ function getJsValue(content: string, regexp: RegExp): any {
   return vm.runInNewContext(match[1], sandbox);
 }
 
-function* iterateTuples(list: any[]): Iterable<[number, string]> {
+/**
+ * @param {any[]} list
+ * @returns {Iterable<[number, string]>}
+ */
+function* iterateTuples(list) {
   if (list.length % 2 !== 0) throw new Error('Invalid list length, should be divisible by tuple size');
 
   const tupleCount = list.length / 2;
 
   for (let i = 0; i < tupleCount; i += 2) {
+    /** @type {[number, string]} */
     const tuple = [0, ''];
     for (let j = 0; j < 2; j += 1) {
       tuple[j] = list[i + j];
@@ -41,7 +60,14 @@ function* iterateTuples(list: any[]): Iterable<[number, string]> {
   }
 }
 
-async function retry(maxRetryCount: number, waitTime: number, f: (...any[]) => Promise<void>, ...args: any[]): Promise<any> {
+/**
+ * @param {number} maxRetryCount
+ * @param {number} waitTime
+ * @param {(...args: any[]) => Promise<void>} f
+ * @param {...any} args
+ * @returns {Promise<any>}
+ */
+async function retry(maxRetryCount, waitTime, f, ...args) {
   let retryCount = 0;
 
   while (true) {
@@ -54,8 +80,14 @@ async function retry(maxRetryCount: number, waitTime: number, f: (...any[]) => P
   }
 }
 
-function objectEntries<T, U>(object: { [T]: U }): [T, U][] {
-  return (Object.entries(object): any)
+/**
+ * @template {string} T
+ * @template U
+ * @param {{ [key in T]: U }} object
+ * @returns {[T, U][]}
+ */
+function objectEntries(object) {
+  return /** @type {any} */ (Object.entries(object))
 }
 
 module.exports = {
