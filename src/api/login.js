@@ -1,6 +1,6 @@
-// @flow
+'use strict';
 
-const axios = require('axios');
+const axios = require('axios').default;
 const fs = require('fs');
 
 const { HOSTNAME, USERNAME, PASSWORD } = require('../config');
@@ -23,7 +23,11 @@ const headers = {
   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36',
 };
 
-function encryptCredentials(sessionValue: string): [string, string] {
+/**
+ * @param {string} sessionValue
+ * @returns {[string, string]}
+ */
+function encryptCredentials(sessionValue) {
   const password = hex_md5(keeplowbyte(PASSWORD)) + sessionValue;
   const passwordHash = hex_md5(password);
   const usernameHash = rc4(password, USERNAME);
@@ -76,7 +80,8 @@ function getTitle(defaultPage) {
   return match[1];
 }
 
-async function login(): Promise<{ zoneTuples: Array<[number, string]> }> {
+/** @returns {Promise<{ zoneTuples: Array<[number, string]> }>} */
+async function login() {
   try {
     await logout();
   } catch (error) {
