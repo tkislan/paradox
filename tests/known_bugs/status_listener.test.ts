@@ -8,13 +8,14 @@ import { holdNextResponse, injectFailure } from '../helpers/panel_faults.ts';
 import {
   POLL, POLL_LINE, ZONES, boot, bootLoggedIn, captureIntervals, expectPollEvents, startListener,
 } from '../helpers/status_listener.ts';
+import { KnownBugStatusMachineSpec } from '../spec/schemas.ts';
 
 const require = createRequire(import.meta.url);
 
-const spec = loadKnownBugSpec('status_machine');
+const spec = loadKnownBugSpec('status_machine', KnownBugStatusMachineSpec);
 
 describe('poll scenarios (spec/known_bugs/status_machine.json)', () => {
-  const groups = ['first_poll', 'armed_codes', 'sensor_codes', 'zone_indexing', 'failures'];
+  const groups = ['first_poll', 'armed_codes', 'sensor_codes', 'zone_indexing', 'failures'] as const;
 
   describe.each(groups)('%s', (group) => {
     it.each(withTitle(spec[group]))('$title', expectPollEvents);

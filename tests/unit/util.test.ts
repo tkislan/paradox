@@ -4,8 +4,9 @@ import {
   captureConsole, cases, loadSpec, settle, specText, spyProcessExit, useFakeClock, waitFor,
 } from '../support.ts';
 import { expectDeepArrayEqual, expectJsValue, expectTuples, scripted } from '../helpers/util.ts';
+import { UtilSpec } from '../spec/schemas.ts';
 
-const spec = loadSpec('util');
+const spec = loadSpec('util', UtilSpec);
 
 describe('sleep', () => {
   it('resolves with undefined exactly when the delay has elapsed', async () => {
@@ -151,9 +152,9 @@ describe('iterateTuples', () => {
 
   it('checks the length when iteration starts, not when the generator is created', () => {
 
-    const generator = iterateTuples([1, 'a', 2]) as Generator<[number, string]>;
+    const iterator = iterateTuples([1, 'a', 2])[Symbol.iterator]();
 
-    expect(() => generator.next()).toThrow(new Error('Invalid list length, should be divisible by tuple size'));
+    expect(() => iterator.next()).toThrow(new Error('Invalid list length, should be divisible by tuple size'));
   });
 
   it('accepts the array getJsValue returns, as login does', () => {

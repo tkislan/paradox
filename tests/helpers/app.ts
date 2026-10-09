@@ -1,8 +1,9 @@
 import { createRequire } from 'node:module';
 import type { MqttClient } from 'mqtt';
 import { expect, vi } from 'vitest';
-import { FakePanel, type FakePanelOptions } from '../mock_paradox.ts';
+import { FakePanel } from '../mock_paradox.ts';
 import { type Broker, watchBroker } from '../mosquitto.ts';
+import type { Expect, PanelFault, Scenario, ScenarioBroker, ScenarioPanel, Step } from '../spec/schemas.ts';
 import {
   captureConsole, isolateProcessListeners, onCleanup, reservePort, setBridgeEnv, settle,
   specText, spyProcessExit, useFakeClock, waitFor,
@@ -15,29 +16,22 @@ const require = createRequire(import.meta.url);
 
 vi.setConfig({ testTimeout: 90000 });
 
-/** The `panel` and `broker` a scenario starts from, as in spec/system_scenarios.json. */
-type PanelFault = { path: string; kind: string; times?: number; page?: string | { file: string } };
-type PanelSpec = Pick<FakePanelOptions, 'zones' | 'statuszone' | 'useraccess'> & { accept_login?: boolean; faults?: PanelFault[]; down?: boolean };
-type BrokerSpec = { retained?: Record<string, string> };
-
-const faultResponse = ({ kind, page }) => {
-  if (kind !== 'page') return FAULTS[kind];
-  return { status: 200, headers: { 'Content-Type': 'text/html' }, body: specText(page) };
+const faultResponse = (fault: PanelFault) => {
+  if (fault.kind !== 'page') return FAULTS[fault.kind];
+  return { status: 200, headers: { 'Content-Type': 'text/html' }, body: specText(fault.page) };
 };
 
-const addFault = (panel, fault) => panel.respondWith(fault.path, faultResponse(fault), fault.times ? { times: fault.times } : {});
+const addFault = (panel: FakePanel, fault: PanelFault) => panel.respondWith(fault.path, faultResponse(fault), fault.times ? { times: fault.times } : {});
 
-/** Swaps vitest's own handler out so the test can observe the event instead of failing the run. */
-export function captureProcessEvent(event: string, seen: any[] = []) {
-  // Process types listeners() only per known event name.
-  const saved = (process as NodeJS.EventEmitter).listeners(event) as Array<(...args: any[]) => void>;
-  process.removeAllListeners(event);
-  process.on(event, (error) => seen.push(error));
+/** Swaps vitest's own handler out so the test can observe unhandled rejections instead of failing the run. */
+function captureUnhandledRejections(seen: unknown[]) {
+  const saved = process.listeners('unhandledRejection');
+  process.removeAllListeners('unhandledRejection');
+  process.on('unhandledRejection', (reason) => seen.push(reason));
   onCleanup(() => {
-    process.removeAllListeners(event);
-    saved.forEach((listener) => process.on(event, listener));
+    process.removeAllListeners('unhandledRejection');
+    saved.forEach((listener) => process.on('unhandledRejection', listener));
   });
-  return seen;
 }
 
 /**
@@ -70,8 +64,8 @@ function connectBridgeUnder(prefix: string) {
  * console, recorded process.exit. `load()` starts the bridge (app.js runs at import time).
  */
 export async function createBridge({ panel: panelSpec = {}, broker: brokerSpec = {}, env = {} }: {
-  panel?: PanelSpec;
-  broker?: BrokerSpec;
+  panel?: ScenarioPanel;
+  broker?: ScenarioBroker;
   env?: Record<string, string | undefined>;
 } = {}) {
   // Before the fake clock, which would freeze the connection's timers.
@@ -93,7 +87,7 @@ export async function createBridge({ panel: panelSpec = {}, broker: brokerSpec =
   await panel.start();
   (panelSpec.faults ?? []).forEach((fault) => addFault(panel, fault));
 
-  for (const [topic, payload] of Object.entries(brokerSpec.retained ?? {})) await broker.publish(topic, payload, { retain: true });
+  for (const [topic, payload] of Object.entries<string>(brokerSpec.retained ?? {})) await broker.publish(topic, payload, { retain: true });
 
   setBridgeEnv({
     HOSTNAME: panelSpec.down ? `127.0.0.1:${await reservePort()}` : panel.hostname,
@@ -153,7 +147,9 @@ export async function createBridge({ panel: panelSpec = {}, broker: brokerSpec =
   return world;
 }
 
-async function perform(world, step) {
+type World = Awaited<ReturnType<typeof createBridge>>;
+
+async function perform(world: World, step: Step) {
   if (step.panel_status) world.panel.setStatus(step.panel_status);
   if (step.panel_fault) {
     addFault(world.panel, step.panel_fault);
@@ -174,7 +170,7 @@ async function perform(world, step) {
  * Waits until the expected effects showed up, lets stray extra effects arrive, then compares
  * everything that happened since the previous check with the expectation.
  */
-async function expectOutcome(world, expected, { checkRequests = true, quiet = true } = {}) {
+async function expectOutcome(world: World, expected: Expect, { checkRequests = true, quiet = true } = {}) {
   const wantPublished = expected.mqtt_published ?? [];
   const anyOrder = expected.panel_requests_any_order !== undefined;
   const wantRequests = expected.panel_requests ?? expected.panel_requests_any_order ?? [];
@@ -217,7 +213,7 @@ async function expectOutcome(world, expected, { checkRequests = true, quiet = tr
     actual.logged_error = now.errors.length > 0;
     wanted.logged_error = expected.logged_error;
   }
-  if ('broker_retained' in expected) {
+  if (expected.broker_retained !== undefined) {
     actual.broker_retained = {};
     for (const topic of Object.keys(expected.broker_retained)) actual.broker_retained[topic] = await broker.retained(topic);
     wanted.broker_retained = expected.broker_retained;
@@ -240,12 +236,12 @@ async function expectRetainedState(broker: Broker) {
   expect(actual).toEqual(last);
 }
 
-export async function runScenario(row) {
-  const unhandled = [];
+export async function runScenario(row: Scenario) {
+  const unhandled: unknown[] = [];
   // Registered before the capture so that it runs after vitest's own handler is back: a failing check must not leave it removed.
   // Also covers rejections raised while the scenario is being torn down.
   onCleanup(() => expect(unhandled).toEqual([]));
-  captureProcessEvent('unhandledRejection', unhandled);
+  captureUnhandledRejections(unhandled);
   const world = await createBridge(row);
   const start = row.start ?? {};
 

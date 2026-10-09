@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import http from 'node:http';
-import type { AddressInfo, Socket } from 'node:net';
+import type { Socket } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { z } from 'zod';
 import { onCleanup } from './support.ts';
 
 /*
@@ -64,6 +65,11 @@ function renderStatusPage({ statuszone, useraccess, alarms = [] }: { statuszone:
   page = swap(page, /tbl_useraccess = new Array\([^)]*\)/, `tbl_useraccess = new Array(${useraccess.join(',')})`);
   return swap(page, /tbl_alarmes = new Array\([^)]*\)/, `tbl_alarmes = new Array(${alarms.map((a) => `"${a}"`).join(',')})`);
 }
+
+// IncomingMessage types both as optional because client responses share the class; a server's requests always have them.
+const ServerRequest = z.object({ method: z.string(), url: z.string() });
+
+const ListeningAddress = z.object({ port: z.number() });
 
 const html = (body: string, status = 200) => ({ status, headers: { 'Content-Type': 'text/html' }, body });
 
@@ -216,12 +222,12 @@ export class FakePanel {
 
   /** Starts listening on loopback (on `port` if given, e.g. to bring a stopped panel back). Auto-stops after the test. */
   async start(port = 0) {
-    this.server = http.createServer((req, res) => {
-      // An http.Server request always has a method and a URL.
-      const url = new URL(req.url!, 'http://panel');
+    const server = http.createServer((req, res) => {
+      const { method, url: target } = ServerRequest.parse(req);
+      const url = new URL(target, 'http://panel');
       const request: PanelRequest = {
-        method: req.method!,
-        url: req.url!,
+        method,
+        url: target,
         path: url.pathname,
         query: Object.fromEntries(url.searchParams),
         headers: req.headers,
@@ -235,12 +241,13 @@ export class FakePanel {
       res.writeHead(result.status, result.headers);
       res.end(result.body);
     });
-    this.server.on('connection', (socket) => {
+    server.on('connection', (socket) => {
       this.sockets.add(socket);
       socket.on('close', () => this.sockets.delete(socket));
     });
-    await new Promise<void>((resolve) => this.server!.listen(port, '127.0.0.1', resolve));
-    this.port = (this.server.address() as AddressInfo).port;
+    this.server = server;
+    await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', resolve));
+    this.port = ListeningAddress.parse(server.address()).port;
     onCleanup(() => this.stop());
     return this;
   }

@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, vi } from 'vitest';
+import type { z } from 'zod';
 
 const TESTS_DIR = path.dirname(fileURLToPath(import.meta.url));
 
@@ -38,16 +39,16 @@ export const cases = <Row extends SpecRow>(rows: Row[]) => rows.map((row): [stri
 export const withTitle = <Row extends SpecRow>(rows: Row[]) => rows.map((row) => ({ ...row, title: rowTitle(row) }));
 
 /** Text of a spec field that is either an inline string or {"file": "<path relative to tests/>"}. */
-export const specText = (content) => (typeof content === 'string' ? content : fs.readFileSync(path.join(TESTS_DIR, content.file), 'utf8'));
+export const specText = (content: string | { file: string }) => (typeof content === 'string' ? content : fs.readFileSync(path.join(TESTS_DIR, content.file), 'utf8'));
 
-/** Parses tests/spec/<name>.json: the language-neutral case tables shared with a future Python suite. */
-export function loadSpec(name: string): Record<string, any[]> {
-  return JSON.parse(fs.readFileSync(path.join(TESTS_DIR, 'spec', `${name}.json`), 'utf8'));
+/** Parses tests/spec/<name>.json, the language-neutral case tables shared with a future Python suite, with its schema. */
+export function loadSpec<Schema extends z.ZodType>(name: string, schema: Schema): z.output<Schema> {
+  return schema.parse(JSON.parse(fs.readFileSync(path.join(TESTS_DIR, 'spec', `${name}.json`), 'utf8')));
 }
 
 /** Parses tests/spec/known_bugs/<name>.json: the rows of <name>.json that pin a defect, which a port need not reproduce. */
-export function loadKnownBugSpec(name: string) {
-  return loadSpec(`known_bugs/${name}`);
+export function loadKnownBugSpec<Schema extends z.ZodType>(name: string, schema: Schema) {
+  return loadSpec(`known_bugs/${name}`, schema);
 }
 
 const cleanups: Array<() => unknown> = [];
@@ -60,7 +61,7 @@ export function onCleanup(fn: () => unknown) {
 // config.js reads the environment once at load, so every test needs src/ loaded afresh. vi.resetModules() cannot do
 // this: it reloads only the file a test imports, while the require() calls inside src/ go to Node's own cache.
 afterEach(async () => {
-  while (cleanups.length) await cleanups.pop()!();
+  while (cleanups.length) await cleanups.pop()?.();
   for (const file of Object.keys(nodeRequire.cache)) {
     if (file.startsWith(SRC_DIR + path.sep)) delete nodeRequire.cache[file];
   }
@@ -88,7 +89,7 @@ export function setBridgeEnv(overrides: Record<string, string | number | undefin
 /** Silences and records console output of the code under test. Returns { log, warn, error } call lists. */
 export function captureConsole() {
   const calls: Record<'log' | 'warn' | 'error', any[][]> = { log: [], warn: [], error: [] };
-  for (const level of Object.keys(calls) as Array<keyof typeof calls>) {
+  for (const level of ['log', 'warn', 'error'] as const) {
     vi.spyOn(console, level).mockImplementation((...args) => { calls[level].push(args); });
   }
   return calls;

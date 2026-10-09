@@ -5,10 +5,11 @@ import {
   captureConsole, loadSpec, onCleanup, setBridgeEnv, settle, useFakeClock, waitFor,
 } from '../support.ts';
 import { drain, injectFailure, servePage } from './panel_faults.ts';
+import { CryptoSpec } from '../spec/schemas.ts';
 
 const require = createRequire(import.meta.url);
 
-const golden = loadSpec('crypto').credentials[0];
+const golden = loadSpec('crypto', CryptoSpec).credentials[0];
 
 export const POLL = '/statuslive.html';
 
@@ -64,7 +65,11 @@ export function captureIntervals() {
   const spy = vi.spyOn(globalThis, 'setInterval');
   // Must be undone before useFakeClock's own cleanup, or the restored spy would put the fake timer back.
   onCleanup(() => spy.mockRestore());
-  return () => spy.mock.calls.at(-1)![0]();
+  return () => {
+    const call = spy.mock.calls.at(-1);
+    if (!call) throw new Error('No interval has been registered yet');
+    return call[0]();
+  };
 }
 
 export async function startListener(zones, panelOptions?: FakePanelOptions) {

@@ -5,11 +5,12 @@ import { holdNextResponse, injectFailure } from '../helpers/panel_faults.ts';
 import {
   POLL, POLL_LINE, ZONES, boot, captureIntervals, expectPollEvents, startListener,
 } from '../helpers/status_listener.ts';
+import { StatusMachineSpec } from '../spec/schemas.ts';
 
-const spec = loadSpec('status_machine');
+const spec = loadSpec('status_machine', StatusMachineSpec);
 
 describe('poll scenarios (spec/status_machine.json)', () => {
-  const groups = ['first_poll', 'armed_codes', 'sensor_codes', 'transitions', 'failures'];
+  const groups = ['first_poll', 'armed_codes', 'sensor_codes', 'transitions', 'failures'] as const;
 
   describe.each(groups)('%s', (group) => {
     it.each(withTitle(spec[group]))('$title', expectPollEvents);

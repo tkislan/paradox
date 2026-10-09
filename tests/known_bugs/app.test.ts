@@ -2,14 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { loadKnownBugSpec, waitFor, withTitle } from '../support.ts';
 import { login } from '../fixtures/app.ts';
 import { createBridge, runScenario } from '../helpers/app.ts';
+import { KnownBugSystemScenariosSpec } from '../spec/schemas.ts';
 
-const spec = loadKnownBugSpec('system_scenarios');
+const spec = loadKnownBugSpec('system_scenarios', KnownBugSystemScenariosSpec);
 
 describe('scenarios', () => {
-  const groups = Object.keys(spec).filter((group) => Array.isArray(spec[group]));
-  for (const group of groups) {
+  for (const [group, rows] of Object.entries(spec)) {
+    if (!Array.isArray(rows)) continue;
     describe(group, () => {
-      it.each(withTitle(spec[group]))('$title', runScenario);
+      it.each(withTitle(rows))('$title', runScenario);
     });
   }
 });

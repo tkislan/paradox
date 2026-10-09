@@ -29,8 +29,8 @@ describe('FakePanel', () => {
 
     const body = await (await get(panel, '/index.html')).text();
 
-    const zones = body.match(/tbl_zone = new Array\(([^)]*)\)/)![1].split(',');
-    expect(zones.slice(0, 4)).toEqual(['1', '"Door"', '0', '" "']);
+    const zones = body.match(/tbl_zone = new Array\(([^)]*)\)/)?.[1].split(',');
+    expect(zones?.slice(0, 4)).toEqual(['1', '"Door"', '0', '" "']);
     expect(zones).toHaveLength(64);
   });
 

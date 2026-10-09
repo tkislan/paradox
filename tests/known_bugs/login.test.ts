@@ -3,8 +3,9 @@ import { loadKnownBugSpec, settle, useFakeClock, waitFor, withTitle } from '../s
 import {
   FLOW_PATHS, expectRequestCounts, expectScenario, outcomeOf, runLoginScenario, startBridge,
 } from '../helpers/login.ts';
+import { KnownBugLoginCasesSpec } from '../spec/schemas.ts';
 
-const spec = loadKnownBugSpec('login_cases');
+const spec = loadKnownBugSpec('login_cases', KnownBugLoginCasesSpec);
 
 describe('login()', () => {
   it.each(withTitle(spec.login))('$title', runLoginScenario);

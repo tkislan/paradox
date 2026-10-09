@@ -4,10 +4,11 @@ import { FakePanel, type FakePanelOptions } from '../mock_paradox.ts';
 import { captureConsole, loadSpec, setBridgeEnv, specText } from '../support.ts';
 import { rejection } from './outcomes.ts';
 import { html } from './responses.ts';
+import { StatusPagesSpec } from '../spec/schemas.ts';
 
 const require = createRequire(import.meta.url);
 
-export const spec = loadSpec('status_pages');
+export const spec = loadSpec('status_pages', StatusPagesSpec);
 
 export const COMMANDS = ['arm', 'disarm'];
 

@@ -2,10 +2,11 @@ import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import { hex_md5, keeplowbyte, rc4 } from '../../src/paradox.js';
 import { loadSpec, setBridgeEnv } from '../support.ts';
+import { CryptoSpec } from '../spec/schemas.ts';
 
 const require = createRequire(import.meta.url);
 
-const spec = loadSpec('crypto');
+const spec = loadSpec('crypto', CryptoSpec);
 
 describe('hex_md5', () => {
   it.each(spec.hex_md5)('$name', ({ input, expected }) => {

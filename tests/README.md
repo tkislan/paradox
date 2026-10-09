@@ -52,6 +52,7 @@ notice a changed value.
 | --- | --- |
 | `spec/*.json`, `spec/crypto_reference.py` | Language-neutral case tables and an independent Python reference. **This is the part to reuse from Python.** `crypto` (vectors), `util`, `status_pages` (panel page -> parsed status), `login_cases` (panel responses -> zones or error), `status_machine` (poll sequence -> events), `system_scenarios` (whole-bridge timelines). |
 | `spec/known_bugs/*.json` | The rows of those tables that pin a defect (`"known_bug"`), same groups and row format. A port can ignore them. |
+| `spec/schemas.ts` | The format of every spec file as zod schemas. `loadSpec(name, schema)` parses a file with its schema, so tests get typed rows, and an unknown key or a wrong type in a spec file fails the load. |
 | `data/*.html` | Real pages captured from a panel. Spec files reference them by path. |
 | `mock_paradox.ts` | Fake panel: the HTTP contract the bridge needs, as a pure `handle()` plus a loopback server. |
 | `docker-compose.yml`, `mosquitto/mosquitto.conf`, `mosquitto.ts` | The real Mosquitto broker and the tests' view of it: a topic prefix per test, what the bridge published, retained messages (see "MQTT tests" below). |
@@ -76,8 +77,8 @@ notice a changed value.
   the one hook into the bridge is the topic prefix its MQTT client gets (see "MQTT tests"). Console output is not contractual; capture it to keep runs quiet.
 - **Expected values are literals or `spec/` entries**, never computed by the code under test.
 - **Data before code.** If a behavior is "input -> output", it is a row in `spec/<topic>.json`:
-  `{ "name", ...inputs, "expected", "known_bug"?, "note"? }`. The JS test is a thin `it.each` loop, which is
-  also what `pytest.mark.parametrize` over the same file looks like.
+  `{ "name", ...inputs, "expected", "known_bug"?, "note"? }`, and its format is in `spec/schemas.ts`. The JS test is a
+  thin `it.each` loop, which is also what `pytest.mark.parametrize` over the same file looks like.
 - **Time**: the bridge's own timers (1 s poll, 3 s keep-alive, 5 s MQTT connect timeout) run on a fake clock
   (`useFakeClock`); sockets are real. Wait for effects with `waitFor`; `settle()` is only for "nothing
   happened" assertions, and with a broker only after `broker.barrier()`.
@@ -120,6 +121,7 @@ projects), then the parsing tables (`status_pages`, `login_cases`), then `status
 | JS | Python |
 | --- | --- |
 | `spec/*.json` + `it.each` | the same files + `pytest.mark.parametrize` |
+| `spec/schemas.ts` (zod) | pydantic models of the same files |
 | `crypto_reference.py` | start of the client library; `python3 -I spec/crypto_reference.py` checks all vectors |
 | `FakePanel.handle(request)` | an `aioclient_mock` callback or `aiohttp` test server around the same function |
 | `FakePanel.requestLines` assertions | the exact URLs the client must request, in order |

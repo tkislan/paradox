@@ -1,10 +1,10 @@
 import { type PanelResult, renderLoginPage } from '../mock_paradox.ts';
 import { loadSpec } from '../support.ts';
+import { SystemScenariosSpec } from '../spec/schemas.ts';
 
-export const spec = loadSpec('system_scenarios');
+export const spec = loadSpec('system_scenarios', SystemScenariosSpec);
 
-// The one entry of system_scenarios.json that is not a table.
-export const login = spec.login as unknown as { session: string; username: string; password: string; u: string; p: string };
+export const login = spec.login;
 
 // Loopback round trips take well under a millisecond; this is the window in which unexpected extra effects can still show up.
 // What reached the broker is settled separately, by broker.barrier().

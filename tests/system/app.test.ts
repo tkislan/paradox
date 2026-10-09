@@ -4,10 +4,10 @@ import { spec } from '../fixtures/app.ts';
 import { runScenario } from '../helpers/app.ts';
 
 describe('scenarios', () => {
-  const groups = Object.keys(spec).filter((group) => Array.isArray(spec[group]));
-  for (const group of groups) {
+  for (const [group, rows] of Object.entries(spec)) {
+    if (!Array.isArray(rows)) continue;
     describe(group, () => {
-      it.each(withTitle(spec[group]))('$title', runScenario);
+      it.each(withTitle(rows))('$title', runScenario);
     });
   }
 });

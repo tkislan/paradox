@@ -4,10 +4,11 @@ import { FakePanel, type FakePanelOptions } from '../mock_paradox.ts';
 import { captureConsole, loadSpec, setBridgeEnv, specText } from '../support.ts';
 import { rejection } from './outcomes.ts';
 import { html } from './responses.ts';
+import { StatusPagesSpec } from '../spec/schemas.ts';
 
 const require = createRequire(import.meta.url);
 
-export const spec = loadSpec('status_pages');
+export const spec = loadSpec('status_pages', StatusPagesSpec);
 
 export const OPERATIONS = [
   ['getStatus', '/statuslive.html'],
@@ -16,7 +17,7 @@ export const OPERATIONS = [
 
 export const requestRows = (rows: any[], ...operations: string[]) => rows.filter((row) => operations.includes(row.operation));
 
-export const httpFailureRows = spec.body_ignoring_responses.filter((row) => 'error' in row.expected);
+export const httpFailureRows = spec.body_ignoring_responses.flatMap((row) => ('error' in row.expected ? [{ ...row, expected: row.expected }] : []));
 
 // The panel's tables are eval-ed in a vm context: their arrays have a foreign prototype, and
 // `new Array(n)` has n unset slots. The spec describes both in language-neutral terms.

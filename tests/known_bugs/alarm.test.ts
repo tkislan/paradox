@@ -4,8 +4,9 @@ import { loadKnownBugSpec, settle, useFakeClock, waitFor, withTitle } from '../s
 import { rejection, track } from '../helpers/outcomes.ts';
 import { html } from '../helpers/responses.ts';
 import { COMMANDS, expectRequestAsSent, expectResponseHandled, requestRows, startBridge } from '../helpers/alarm.ts';
+import { StatusPagesSpec } from '../spec/schemas.ts';
 
-const spec = loadKnownBugSpec('status_pages');
+const spec = loadKnownBugSpec('status_pages', StatusPagesSpec);
 
 describe('requests as sent', () => {
   it.each(withTitle(requestRows(spec.requests, 'arm', 'disarm')))('$title sends exactly $request, with only the HTTP client default headers', expectRequestAsSent);

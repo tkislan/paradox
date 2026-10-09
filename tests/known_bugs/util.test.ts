@@ -2,8 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { deepArrayEqual, getJsValue, retry } from '../../src/util.js';
 import { cases, loadKnownBugSpec, useFakeClock, waitFor } from '../support.ts';
 import { expectDeepArrayEqual, expectJsValue, expectTuples } from '../helpers/util.ts';
+import { KnownBugUtilSpec } from '../spec/schemas.ts';
 
-const spec = loadKnownBugSpec('util');
+const spec = loadKnownBugSpec('util', KnownBugUtilSpec);
 
 describe('deepArrayEqual', () => {
   it.each(cases(spec.deepArrayEqual))('%s', (_title, row) => expectDeepArrayEqual(row));

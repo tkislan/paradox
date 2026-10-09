@@ -5,8 +5,9 @@ import { loadKnownBugSpec, settle, specText, useFakeClock, waitFor, withTitle } 
 import {
   OPERATIONS, expectKeepAliveOutcome, expectParsedStatus, expectRequestAsSent, requestRows, startBridge,
 } from '../helpers/status.ts';
+import { StatusPagesSpec } from '../spec/schemas.ts';
 
-const spec = loadKnownBugSpec('status_pages');
+const spec = loadKnownBugSpec('status_pages', StatusPagesSpec);
 
 describe('getStatus() page parsing', () => {
   it.each(withTitle(spec.get_status))('$title', expectParsedStatus);

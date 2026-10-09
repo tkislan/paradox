@@ -2,14 +2,19 @@ import { createRequire } from 'node:module';
 import { expect } from 'vitest';
 import { FakePanel, type FakePanelOptions, type PanelResult, renderIndexPage, type Zone } from '../mock_paradox.ts';
 import { captureConsole, loadSpec, setBridgeEnv, specText } from '../support.ts';
+import { CryptoSpec, LoginCasesSpec, type ResponseRule } from '../spec/schemas.ts';
 
 const require = createRequire(import.meta.url);
 
-export const crypto = loadSpec('crypto');
+export const crypto = loadSpec('crypto', CryptoSpec);
 
-export const spec = loadSpec('login_cases');
+export const spec = loadSpec('login_cases', LoginCasesSpec);
 
-export const vector = (name) => crypto.credentials.find((c) => c.name === name);
+export function vector(name: string) {
+  const credentials = crypto.credentials.find((c) => c.name === name);
+  if (!credentials) throw new Error(`spec/crypto.json has no credentials named ${name}`);
+  return credentials;
+}
 
 export const golden = vector('sample session, 4 digit code');
 
@@ -20,7 +25,7 @@ export const FLOW_PATHS = ['/logout.html', '/login_page.html', '/default.html', 
 const ZONE_SLOTS = 32;
 
 function pageBody(rule: ResponseRule) {
-  if (rule.file !== undefined) return specText(rule);
+  if (rule.file !== undefined) return specText({ file: rule.file });
   if (rule.body !== undefined) return rule.body;
   if (rule.zones !== undefined) return renderIndexPage(rule.zones);
   if (rule.zones_by_slot !== undefined) {
@@ -39,22 +44,9 @@ function toResponse(rule: ResponseRule): PanelResult {
 
 function applyResponses(panel: FakePanel, responses: Record<string, ResponseRule | ResponseRule[]>) {
   for (const [pathname, rules] of Object.entries(responses)) {
-    for (const rule of ([] as ResponseRule[]).concat(rules)) panel.respondWith(pathname, toResponse(rule), { times: rule.times });
+    for (const rule of [rules].flat()) panel.respondWith(pathname, toResponse(rule), { times: rule.times });
   }
 }
-
-/** How the fake panel answers a request, as in the `panel` of spec/login_cases.json. */
-type ResponseRule = {
-  file?: string;
-  body?: string;
-  zones?: Zone[];
-  zones_by_slot?: Record<string, Zone>;
-  destroy?: boolean;
-  hang?: boolean;
-  status?: number;
-  headers?: Record<string, string>;
-  times?: number;
-};
 
 export async function startBridge({ responses = {}, panelOptions = {}, env = {} }: {
   responses?: Record<string, ResponseRule | ResponseRule[]>;
