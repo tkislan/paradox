@@ -1,5 +1,5 @@
 # Isolated Mosquitto brokers for the test suite. The bridge hard-codes its topics, so tests that run in
-# parallel cannot share a broker; each test leases one of these instances (see mosquitto.js).
+# parallel cannot share a broker; each test leases one of these instances (see mosquitto.ts).
 name: paradox-tests
 
 services:

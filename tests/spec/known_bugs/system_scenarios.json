@@ -261,7 +261,7 @@
     {
       "name": "unauthenticated POST /disarm disarms the alarm",
       "known_bug": "KB-19",
-      "note": "No credential of any kind is part of the request; the bridge also listens on all interfaces (checked in app.test.js).",
+      "note": "No credential of any kind is part of the request; the bridge also listens on all interfaces (checked in app.test.ts).",
       "panel": {"useraccess": [2, 0]},
       "steps": [
         {"rest": {"method": "POST", "path": "/disarm"}, "expect": {"panel_requests": ["GET /statuslive.html?area=00&value=d"], "rest_response": {"status": 200, "body": "OK"}}},
