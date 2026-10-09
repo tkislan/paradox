@@ -8,7 +8,7 @@ import { afterEach, vi } from 'vitest';
 
 const TESTS_DIR = path.dirname(fileURLToPath(import.meta.url));
 
-export const SRC_DIR = path.join(TESTS_DIR, '..', 'src');
+const SRC_DIR = path.join(TESTS_DIR, '..', 'src');
 
 const nodeRequire = createRequire(import.meta.url);
 

@@ -10,7 +10,7 @@ export default defineConfig({
     // Tests import src/ through Node itself, as the code under test requires its own modules: with vitest's loader
     // in between, one file would be loaded both ways and v8 coverage loses lines when merging the two.
     server: { deps: { external: [new RegExp(`^${RegExp.escape(SRC_DIR)}`)] } },
-    // A test may wait up to a minute for a free broker (mosquitto.js), and its cleanup talks to the broker too.
+    // A test may wait up to a minute for a free broker (mosquitto.ts), and its cleanup talks to the broker too.
     hookTimeout: 90000,
     coverage: {
       provider: 'v8',

@@ -59,7 +59,7 @@ export function renderIndexPage(zones: Zone[]) {
   return swap(TEMPLATES.index, /tbl_zone = new Array\([^)]*\)/, `tbl_zone = new Array(${array})`);
 }
 
-export function renderStatusPage({ statuszone, useraccess, alarms = [] }: { statuszone: number[]; useraccess: number[]; alarms?: string[] }) {
+function renderStatusPage({ statuszone, useraccess, alarms = [] }: { statuszone: number[]; useraccess: number[]; alarms?: string[] }) {
   let page = swap(TEMPLATES.status, /tbl_statuszone = new Array\([^)]*\)/, `tbl_statuszone = new Array(${statuszone.join(',')})`);
   page = swap(page, /tbl_useraccess = new Array\([^)]*\)/, `tbl_useraccess = new Array(${useraccess.join(',')})`);
   return swap(page, /tbl_alarmes = new Array\([^)]*\)/, `tbl_alarmes = new Array(${alarms.map((a) => `"${a}"`).join(',')})`);
@@ -73,8 +73,6 @@ export type PanelRequest = {
   path: string;
   query: Record<string, string>;
   headers: http.IncomingHttpHeaders;
-  /** When the panel received it (performance.now()); only a TimedPanel (helpers/process.ts) records it. */
-  at?: number;
 };
 
 /** What the panel answers: a response, or a transport fault (`destroy` resets the socket, `hang` never answers). */

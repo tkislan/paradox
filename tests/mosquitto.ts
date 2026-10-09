@@ -152,8 +152,6 @@ export async function leaseBroker() {
   return broker;
 }
 
-export type { Broker, BrokerProxy };
-
 class Broker {
   name: string;
   port: number;
