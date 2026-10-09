@@ -20,8 +20,6 @@
   "devDependencies": {
     "@types/node": "^24.19.1",
     "@vitest/coverage-v8": "^5.0.3",
-    "mqtt-packet": "^9.0.2",
-    "mqtt5": "npm:mqtt@^5.16.0",
     "typescript": "^7.0.2",
     "vitest": "^5.0.3"
   }

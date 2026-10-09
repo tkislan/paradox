@@ -1,14 +1,13 @@
 import { type PanelResult, renderLoginPage } from '../mock_paradox.ts';
 import { loadSpec } from '../support.ts';
 
-// Every scenario waits for a free Mosquitto instance and talks to it over docker's network.
 export const spec = loadSpec('system_scenarios');
 
 // The one entry of system_scenarios.json that is not a table.
 export const login = spec.login as unknown as { session: string; username: string; password: string; u: string; p: string };
 
 // Loopback round trips take well under a millisecond; this is the window in which unexpected extra effects can still show up.
-// What the broker did is settled separately, by broker.syncLog().
+// What reached the broker is settled separately, by broker.barrier().
 export const QUIET_MS = 10;
 
 export const WAIT_INTERVAL_MS = 2;
@@ -16,8 +15,6 @@ export const WAIT_INTERVAL_MS = 2;
 export const REACH_TIMEOUT_MS = 8000;
 
 export const READY_TIMEOUT_MS = 15000;
-
-export const SIGNALS = ['SIGHUP', 'SIGINT', 'SIGTERM'];
 
 export const FAULTS: Record<string, PanelResult> = {
   http_500: { status: 500, headers: { 'Content-Type': 'text/plain' }, body: 'Internal Server Error' },
