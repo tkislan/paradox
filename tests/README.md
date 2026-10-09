@@ -10,15 +10,16 @@ From the repository root (vitest is a dev dependency of the root project; Node 2
 ```sh
 nvm use
 npm ci
-npm test           # starts the Mosquitto brokers, runs vitest with v8 coverage
+docker compose -f tests/docker-compose.yml up --detach --wait   # the Mosquitto brokers, once
+npm test           # runs vitest with v8 coverage
 npx vitest run unit/util   # a subset: file name filters work from the root
 ```
 
-**Docker is required**: the MQTT tests run against real Mosquitto brokers started from
+**The brokers are a prerequisite**: the MQTT tests run against real Mosquitto brokers from
 `tests/docker-compose.yml` (24 isolated containers of `eclipse-mosquitto:2`, about 5 s to start; the first run
-pulls the image). `npm test` starts them if needed and removes them afterwards. `PARADOX_KEEP_BROKERS=1` leaves
-them running (watch mode, several runs in parallel); `MOSQUITTO_REPLICAS` changes their number. Runs never
-recreate running containers, so after editing the compose file run `docker compose -f tests/docker-compose.yml down` first.
+pulls the image). The suite neither starts nor stops them, so parallel runs (watch mode, agents) share them;
+`docker compose -f tests/docker-compose.yml down` removes them, and `MOSQUITTO_REPLICAS` changes their number.
+Without them, every test that leases a broker fails with the command above.
 
 About 730 tests, 50 s. `npx vitest run --exclude 'tests/known_bugs/**'` skips the 206 that pin a defect. In agent/CI
 environments vitest may pick a reporter that hides console output; use `npx vitest run --reporter=default` to see
@@ -133,7 +134,7 @@ A test is only worth keeping if a realistic bug breaks it. To check by hand:
 
 ```sh
 $EDITOR src/util.js                              # flip a branch, change a constant, drop a statement
-PARADOX_KEEP_BROKERS=1 npx vitest run unit/util   # must fail
+npx vitest run unit/util                         # must fail
 git restore src/util.js
 ```
 

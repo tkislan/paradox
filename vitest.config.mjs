@@ -6,7 +6,6 @@ const SRC_DIR = fileURLToPath(new URL('./src/', import.meta.url));
 export default defineConfig({
   test: {
     include: ['tests/**/*.test.js'],
-    globalSetup: ['tests/global_setup.js'],
     restoreMocks: true,
     // Tests import src/ through Node itself, as the code under test requires its own modules: with vitest's loader
     // in between, one file would be loaded both ways and v8 coverage loses lines when merging the two.

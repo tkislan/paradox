@@ -58,11 +58,12 @@ async function listInstances() {
   }
   const text = stdout.trim();
   const containers = text.startsWith('[') ? JSON.parse(text) : text.split('\n').filter(Boolean).map((line) => JSON.parse(line));
-  instances = containers
+  const running = containers
     .filter((c) => c.State === 'running')
     .map((c) => ({ name: c.Name, port: c.Publishers.find((p) => p.TargetPort === 1883).PublishedPort }))
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-  if (instances.length === 0) throw new Error('No Mosquitto containers running: `npm test` starts them, or run `docker compose up -d --wait` in tests/.');
+  if (running.length === 0) throw new Error('No Mosquitto containers running: start them with `docker compose -f tests/docker-compose.yml up --detach --wait`.');
+  instances = running;
   return instances;
 }
 

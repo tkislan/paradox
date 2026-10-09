@@ -25,8 +25,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
-      # Starts the Mosquitto containers from tests/docker-compose.yml, runs the suite with coverage
-      # thresholds, and removes the containers.
+      - run: docker compose -f tests/docker-compose.yml up --detach --wait
       - run: npm test
 
   # Builds the multi-platform image on every run, so a pull request proves that it builds and then throws the result
