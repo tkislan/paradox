@@ -11,7 +11,7 @@ const TESTS_DIR = path.dirname(fileURLToPath(import.meta.url));
 // PARADOX_BUILD_DIR points the suite at a mutated copy of the build (see README, "Mutation checks").
 export const BUILD_DIR = process.env.PARADOX_BUILD_DIR
   ? path.resolve(process.env.PARADOX_BUILD_DIR)
-  : path.join(TESTS_DIR, '.build');
+  : path.join(TESTS_DIR, '..', 'src');
 
 const nodeRequire = createRequire(import.meta.url);
 

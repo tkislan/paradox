@@ -1,3 +1,5 @@
+'use strict';
+
 function core_md5(x, len) {
     x[len >> 5] |= 0x80 << ((len) % 32);
     x[(((len + 64) >>> 9) << 4) + 14] = len;

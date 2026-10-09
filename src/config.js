@@ -1,25 +1,27 @@
-// @flow
+'use strict';
 
 const ENV_VARIABLES = ['HOSTNAME', 'USERNAME', 'PASSWORD', 'PORT', 'MQTT_HOSTNAME', 'MQTT_PORT', 'MQTT_USERNAME', 'MQTT_PASSWORD'];
 
-type EnvironmentVariables = {
-  HOSTNAME: string,
-  USERNAME: string,
-  PASSWORD: string,
-  PORT: string,
-  MQTT_HOSTNAME: string,
-  MQTT_PORT: string,
-  MQTT_USERNAME: string,
-  MQTT_PASSWORD: string,
-};
+/**
+ * @typedef {object} EnvironmentVariables
+ * @property {string} HOSTNAME
+ * @property {string} USERNAME
+ * @property {string} PASSWORD
+ * @property {string} PORT
+ * @property {string} MQTT_HOSTNAME
+ * @property {string} MQTT_PORT
+ * @property {string} MQTT_USERNAME
+ * @property {string} MQTT_PASSWORD
+ */
 
-function parseEnvironment(): EnvironmentVariables {
+/** @returns {EnvironmentVariables} */
+function parseEnvironment() {
   return ENV_VARIABLES.reduce((acc, key) => {
     const value = process.env[key];
     if (value == null) throw new Error(`Missing enviromnent variable: ${key}`);
 
     return { ...acc, [key]: value };
-  }, {});
+  }, /** @type {EnvironmentVariables} */ ({}));
 }
 
 module.exports = parseEnvironment();

@@ -1,6 +1,4 @@
 /node_modules
 /.idea
-/build
-/tests/.build
 /tests/coverage
 /tests/.mutants

@@ -7,9 +7,8 @@
     "node": ">=24"
   },
   "scripts": {
-    "start": "node -r @babel/register ./src/app.js",
-    "build": "babel --verbose src/ -d build",
-    "flow": "flow check src/",
+    "start": "node ./src/app.js",
+    "typecheck": "tsc",
     "test": "vitest run --coverage",
     "test:watch": "vitest"
   },
@@ -19,15 +18,11 @@
     "mqtt": "^2.18.8"
   },
   "devDependencies": {
-    "@babel/cli": "^7.2.3",
-    "@babel/core": "^7.2.2",
-    "@babel/preset-flow": "^7.0.0",
-    "@babel/register": "^7.0.0",
+    "@types/node": "^24.19.1",
     "@vitest/coverage-v8": "^5.0.3",
-    "babel-preset-env": "^1.7.0",
-    "flow-bin": "^0.92.1",
     "mqtt-packet": "^9.0.2",
     "mqtt5": "npm:mqtt@^5.16.0",
+    "typescript": "^7.0.2",
     "vitest": "^5.0.3"
   }
 }

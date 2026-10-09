@@ -10,8 +10,7 @@ export default defineConfig({
     hookTimeout: 90000,
     coverage: {
       provider: 'v8',
-      // Babel output of src/; source maps point the report back at src/*.js.
-      include: ['tests/.build/**/*.js'],
+      include: ['src/**/*.js'],
       reportsDirectory: 'tests/coverage',
       reporter: [['text', { skipFull: false }], 'html', 'json-summary'],
       // Only dead code in src/ is uncovered (see README); a drop below this means a behavior lost its tests.

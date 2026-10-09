@@ -3,12 +3,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const testsDir = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(testsDir, '..');
 const COMPOSE_FILE = path.join(testsDir, 'docker-compose.yml');
 
 export default function setup() {
   startBrokers();
-  buildBridge();
   // PARADOX_KEEP_BROKERS leaves them running: parallel runs (agents, watch mode) share the same instances.
   return process.env.PARADOX_KEEP_BROKERS ? undefined : stopBrokers;
 }
@@ -28,17 +26,4 @@ function startBrokers() {
 
 function stopBrokers() {
   compose('down', '--timeout', '1');
-}
-
-// Tests run the same Babel output production ships (`npm run build`), not src/ directly: src/ is
-// Flow-annotated CommonJS that Vite cannot load. Source maps let coverage map back onto src/.
-function buildBridge() {
-  if (process.env.PARADOX_BUILD_DIR) return;
-
-  const babel = path.join(repoRoot, 'node_modules/@babel/cli/bin/babel.js');
-  execFileSync(
-    process.execPath,
-    [babel, 'src', '-d', 'tests/.build', '--source-maps', '--delete-dir-on-start'],
-    { cwd: repoRoot, stdio: ['ignore', 'ignore', 'inherit'] },
-  );
 }

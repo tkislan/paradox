@@ -1,24 +1,8 @@
 # check=skip=FromPlatformFlagConstDisallowed
-# Multi-architecture image (linux/amd64, linux/arm64). Both stages that run commands use the build
-# machine's amd64: flow-bin 0.92 only ships an x64 binary, and node_modules is pure JavaScript, so one
-# install serves every target and the final stage needs no emulation. Building on an arm64 machine
-# therefore runs those two stages under emulation.
+# Multi-architecture image (linux/amd64, linux/arm64). The stage that runs commands uses the build
+# machine's amd64: node_modules is pure JavaScript, so one install serves every target and the final
+# stage needs no emulation. Building on an arm64 machine therefore runs that stage under emulation.
 #   docker buildx build --platform linux/amd64,linux/arm64 .
-
-FROM --platform=linux/amd64 node:24-bookworm-slim AS builder
-
-USER node
-ENV HOME=/home/node
-WORKDIR $HOME/app
-
-ADD package.json package-lock.json $HOME/app/
-
-RUN npm ci
-
-COPY . $HOME/app/
-
-RUN npm run flow
-RUN npm run build
 
 FROM --platform=linux/amd64 node:24-bookworm-slim AS deps
 
@@ -46,6 +30,6 @@ WORKDIR $HOME/app
 ENV NODE_ENV=production
 
 COPY --from=deps $HOME/app/node_modules $HOME/app/node_modules
-COPY --from=builder $HOME/app/build $HOME/app/
+COPY src/ $HOME/app/
 
 CMD ["node", "app.js"]
