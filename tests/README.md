@@ -70,7 +70,10 @@ notice a changed value.
   `known_bugs/`, rows in `spec/known_bugs/`, tables only they use in `fixtures/known_bugs/`; `unit/known_bug_layout.test.ts`
   fails when one turns up elsewhere. The program has run for years, so these are improvements to consider rather
   than requirements: everything outside those paths is what a port has to meet, and a port decides per entry whether
-  to keep or fix the behavior (the catalog says what the sensible fix is).
+  to keep or fix the behavior (the catalog says what the sensible fix is). Three entries cannot be kept apart, because
+  ordinary tests depend on them as well: KB-4 (after a start only differences are published, which most scenarios'
+  first poll assumes), KB-5 (retries do not wait) and KB-9 (the keep-alive request is exactly
+  `GET /keep_alive.html?msgid=1`). A port that fixes one of them updates those tests along with it.
 - **Test files hold test cases only.** Setup, assertion helpers, scenario interpreters and data tables live in `helpers/` and `fixtures/` (one module per test file, plus a few shared ones: `outcomes`, `responses`, `panel_faults`), which is what a port re-creates as `conftest.py` and helper modules; the test files then translate one to one.
 - **Black box at the lowest observable boundary**: HTTP requests/responses, MQTT messages, `process.exit` codes. No
   `vi.mock` of modules (it cannot intercept the CommonJS `require` graph and would tie tests to the implementation);
