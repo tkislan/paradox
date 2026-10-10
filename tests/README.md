@@ -25,7 +25,7 @@ The tests are TypeScript that vitest runs as is (it strips the types, nothing is
 checks them together with `src/`, with the same settings: `strict`, but unannotated parameters allowed (`any`).
 `tests/package.json` marks them as ES modules, which they are under vitest.
 
-About 630 tests, 10 s. `npx vitest run --exclude 'tests/known_bugs/**'` skips the 156 that pin a defect. In agent/CI
+About 630 tests, 10 s. `npx vitest run --exclude 'tests/known_bugs/**'` skips the 157 that pin a defect. In agent/CI
 environments vitest may pick a reporter that hides console output; use `npx vitest run --reporter=default` to see
 whether a change made the suite noisy (it must stay silent).
 
@@ -162,7 +162,7 @@ and the MQTT connection, REST API, shutdown and configuration scenarios.
 | KB-15 | Alarm and trouble tables are never parsed (`alarms` is always `[0]`) | `status_pages.json` | parse them |
 | KB-16 | Any payload on `paradox/command/arm|disarm` triggers the command | `system_scenarios.json` | validate payload |
 | KB-18 | Only area 1 exists: `useraccess[0]`, command `area=00`, and the `tbl_zone` flag (really an area bitmask, see below) is compared with `== 1`, dropping zones of area 2 or of both | `login_cases.json`, `status_machine.json` | all areas |
-| KB-21 | Only zone code `1` is "open"; `4` (open+trouble), `6` (open+memory, zone 5 of the captured `unarmed.html`) and `2` (alarm) read as closed | `status_machine.json` | map all codes |
+| KB-21 | Only zone code `1` is "open"; `4` (open+trouble), `6` (open+memory, zone 5 of the captured `unarmed.html`) and `2` (alarm) read as closed | `status_machine.json`, `system_scenarios.json` | map all codes |
 | KB-22 | Only `useraccess` 1, 2, 7 are mapped (7 = exit delay counts as armed); stay, sleep, in alarm, entry delay, ready, ... become "unknown" and publish nothing, so an alarm is never reported | `status_machine.json` | map all codes |
 | KB-23 | `tbl_* = new Array(n)` with one number is `n` empty slots, not `[n]` | `status_pages.json`, `util.test.ts` | parse literals |
 | KB-27 | An error in the poll callback (no `'error'` listener, after `stop()`, or a throwing listener) is an unhandled promise rejection | `status_listener.test.ts` | - |

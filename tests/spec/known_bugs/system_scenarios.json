@@ -122,6 +122,16 @@
   ],
   "sensors": [
     {
+      "name": "open codes 2, 4 and 6 read as closed",
+      "known_bug": "KB-21",
+      "note": "Per the panel script notes in README.md (unverified on a real panel) 2 means \"in alarm\", 4 \"open+trouble\" and 6 \"open+memory\", but only code 1 counts as open, so the three open sensors publish OFF.",
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/sensor/0", "payload": "ON"}, {"topic": "paradox/sensor/1", "payload": "ON"}, {"topic": "paradox/sensor/2", "payload": "ON"}]}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [2, 4, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"mqtt_published": [{"topic": "paradox/sensor/0", "payload": "OFF"}, {"topic": "paradox/sensor/1", "payload": "OFF"}, {"topic": "paradox/sensor/2", "payload": "OFF"}], "panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}}
+      ]
+    },
+    {
       "name": "closed sensors at startup publish nothing, whatever their code",
       "known_bug": "KB-4",
       "note": "The captured unarmed page has codes 5 and 6 on two zones; they start 'closed' like everything else.",

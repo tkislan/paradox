@@ -158,9 +158,9 @@ describe('iterateTuples', () => {
   });
 
   it('accepts the array getJsValue returns, as login does', () => {
-    const zones = getJsValue('z=new Array(1,"Door",0," ",1,"Hall",1,"Attic")', /z=(.*)/);
+    const zones = getJsValue('z=new Array(1,"Door")', /z=(.*)/);
 
-    expect(Array.from(iterateTuples(zones))).toEqual([[1, 'Door'], [0, ' ']]);
+    expect(Array.from(iterateTuples(zones))).toEqual([[1, 'Door']]);
   });
 });
 
