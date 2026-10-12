@@ -1,5 +1,5 @@
 {
-  // Type-checks the plain JavaScript in src/ through its JSDoc types; nothing is compiled.
+  // Type-checks src/ (plain JavaScript, through its JSDoc types) and the TypeScript tests; nothing is compiled.
   "compilerOptions": {
     "allowJs": true,
     "checkJs": true,
@@ -8,7 +8,10 @@
     // Unannotated parameters stay allowed, as they were under Flow.
     "noImplicitAny": false,
     "module": "nodenext",
-    "types": ["node"]
+    "types": ["node"],
+    // The tests import each other by their real (.ts) file names.
+    "allowImportingTsExtensions": true
   },
-  "include": ["src"]
+  "include": ["src", "tests"],
+  "exclude": ["tests/coverage"]
 }

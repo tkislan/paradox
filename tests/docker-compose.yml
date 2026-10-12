@@ -1,0 +1,17 @@
+# The Mosquitto broker of the test suite, shared by all tests: each test works under a topic prefix of its own
+# (see mosquitto.ts), so tests running in parallel never see each other's messages.
+name: paradox-tests
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-t", "$$SYS/broker/version", "-C", "1", "-W", "3"]
+      # Fast checks while starting, so `up --wait` returns quickly.
+      start_period: 30s
+      start_interval: 500ms
+    restart: "no"

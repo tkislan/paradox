@@ -1,0 +1,468 @@
+{
+  "_comment": "State machine of src/status_listener.js. SCENARIO groups (first_poll, armed_codes, sensor_codes, transitions, zone_indexing, failures): { name, zones, polls, expected_events, known_bug?, note? }. zones are the [enabled, name] tuples handed to statusListener() (already filtered by login(); the listener only uses their count and order). polls has one entry per 1000 ms tick: { statuszone, useraccess } makes the panel serve those tables (status code per zone; area state codes, first entry is area 1; tables have 0 or >= 2 entries because a one-entry table is a JavaScript new Array(n)); { page: { file } } serves that captured page (relative to tests/); { fail } makes the panel misbehave for this tick only: { status: n, body? } HTTP answer with that status (default body: a short error text), { connection: \"refused\" | \"reset\" } transport failure, { page: { file } } HTTP 200 with a page that has no status tables. expected_events lists, in emission order over the whole run: [\"armedChanged\", true | false | null], [\"sensorChanged\", \"<zone index as a decimal string>\", true | false], [\"error\"]. Before the first poll the listener assumes armed = null and every sensor = false; it never announces that state, only differences from it. CADENCE group (status_poll_cadence): { name, advance_ms: [...], expected_requests: [...] } advance a fake clock step by step from the creation of the listener and give the cumulative number of requests the panel has seen after each step (GET /statuslive.html). Rows with a known_bug (catalog in README.md) are in known_bugs/status_machine.json, in the same groups; zone_indexing exists only there.",
+  "first_poll": [
+    {
+      "name": "armed panel",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }],
+      "expected_events": [["armedChanged", true]]
+    },
+    {
+      "name": "arming (code 7) counts as armed",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [7, 0] }],
+      "expected_events": [["armedChanged", true]]
+    },
+    {
+      "name": "open zone on the first poll: armed first, then the sensor",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 0], "useraccess": [1, 0] }],
+      "expected_events": [["armedChanged", false], ["sensorChanged", "0", true]]
+    },
+    {
+      "name": "every zone open on the first poll: sensors in index order",
+      "zones": [[1, "A"], [1, "B"], [1, "C"]],
+      "polls": [{ "statuszone": [1, 1, 1], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "1", true], ["sensorChanged", "2", true]]
+    },
+    {
+      "name": "only the open zone is announced on the first poll",
+      "zones": [[1, "A"], [1, "B"], [1, "C"]],
+      "polls": [{ "statuszone": [0, 1, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "1", true]]
+    }
+  ],
+  "armed_codes": [
+    {
+      "name": "code 1 after armed: disarmed",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [1, 0] }],
+      "expected_events": [["armedChanged", true], ["armedChanged", false]]
+    },
+    {
+      "name": "code 2 after disarmed: armed",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [1, 0] }, { "statuszone": [0, 0], "useraccess": [2, 0] }],
+      "expected_events": [["armedChanged", false], ["armedChanged", true]]
+    },
+    {
+      "name": "code 7 after disarmed: armed",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [1, 0] }, { "statuszone": [0, 0], "useraccess": [7, 0] }],
+      "expected_events": [["armedChanged", false], ["armedChanged", true]]
+    },
+    {
+      "name": "armed to arming (2 -> 7): no event",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [7, 0] }],
+      "expected_events": [["armedChanged", true]]
+    },
+    {
+      "name": "arming to armed (7 -> 2): no event",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [7, 0] }, { "statuszone": [0, 0], "useraccess": [2, 0] }],
+      "expected_events": [["armedChanged", true]]
+    },
+    {
+      "name": "arming to disarmed (7 -> 1)",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [7, 0] }, { "statuszone": [0, 0], "useraccess": [1, 0] }],
+      "expected_events": [["armedChanged", true], ["armedChanged", false]]
+    },
+    {
+      "name": "code 0 after armed: unknown (null)",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [0, 0] }],
+      "expected_events": [["armedChanged", true], ["armedChanged", null]]
+    },
+    {
+      "name": "code 11 after armed: unknown (null)",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [11, 0] }],
+      "expected_events": [["armedChanged", true], ["armedChanged", null]]
+    },
+    {
+      "name": "code 12 after armed: unknown (null)",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [12, 0] }],
+      "expected_events": [["armedChanged", true], ["armedChanged", null]]
+    },
+    {
+      "name": "code 20 after armed: unknown (null)",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [20, 0] }],
+      "expected_events": [["armedChanged", true], ["armedChanged", null]]
+    },
+    {
+      "name": "code 70 after armed: unknown (null)",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [70, 0] }],
+      "expected_events": [["armedChanged", true], ["armedChanged", null]]
+    },
+    {
+      "name": "unknown after disarmed: null is emitted",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [1, 0] }, { "statuszone": [0, 0], "useraccess": [0, 0] }],
+      "expected_events": [["armedChanged", false], ["armedChanged", null]]
+    },
+    {
+      "name": "unknown and back: null then the state again",
+      "zones": [[1, "A"]],
+      "polls": [
+        { "statuszone": [0, 0], "useraccess": [2, 0] },
+        { "statuszone": [0, 0], "useraccess": [0, 0] },
+        { "statuszone": [0, 0], "useraccess": [2, 0] }
+      ],
+      "expected_events": [["armedChanged", true], ["armedChanged", null], ["armedChanged", true]]
+    },
+    {
+      "name": "empty useraccess table after armed: unknown (null)",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [] }],
+      "expected_events": [["armedChanged", true], ["armedChanged", null]]
+    }
+  ],
+  "sensor_codes": [
+    {
+      "name": "code 1 is open",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [0, 0] }, { "statuszone": [1, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true]]
+    },
+    {
+      "name": "code 1 stays open: announced once",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [1, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true]]
+    },
+    {
+      "name": "code 0 after open: closed",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [0, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]]
+    },
+    {
+      "name": "code 3 after open: closed",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [3, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]]
+    },
+    {
+      "name": "code 5 after open: closed",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [5, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]]
+    },
+    {
+      "name": "code 7 after open: closed",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [7, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]]
+    },
+    {
+      "name": "code 8 after open: closed",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [8, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]]
+    },
+    {
+      "name": "code 9 after open: closed",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [9, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]]
+    },
+    {
+      "name": "code 10 after open: closed",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [10, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]]
+    },
+    {
+      "name": "code 11 after open: closed",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [11, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]]
+    },
+    {
+      "name": "code 12 after open: closed",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [12, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]]
+    },
+    {
+      "name": "only the second zone is open",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [0, 0] }, { "statuszone": [0, 1], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "1", true]]
+    },
+    {
+      "name": "open code 1 in a longer table (32 entries) is read at its position",
+      "zones": [[1, "A"], [1, "B"], [1, "C"]],
+      "polls": [
+        {
+          "statuszone": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+          "useraccess": [0, 0]
+        },
+        {
+          "statuszone": [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+          "useraccess": [0, 0]
+        }
+      ],
+      "expected_events": [["sensorChanged", "2", true]]
+    }
+  ],
+  "transitions": [
+    {
+      "name": "identical polls emit once",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [
+        { "statuszone": [1, 0], "useraccess": [2, 0] },
+        { "statuszone": [1, 0], "useraccess": [2, 0] },
+        { "statuszone": [1, 0], "useraccess": [2, 0] }
+      ],
+      "expected_events": [["armedChanged", true], ["sensorChanged", "0", true]]
+    },
+    {
+      "name": "a sensor opens, closes and opens again: every change is emitted",
+      "zones": [[1, "A"]],
+      "polls": [
+        { "statuszone": [1, 0], "useraccess": [0, 0] },
+        { "statuszone": [0, 0], "useraccess": [0, 0] },
+        { "statuszone": [1, 0], "useraccess": [0, 0] }
+      ],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false], ["sensorChanged", "0", true]]
+    },
+    {
+      "name": "armed toggles: every change is emitted",
+      "zones": [[1, "A"]],
+      "polls": [
+        { "statuszone": [0, 0], "useraccess": [1, 0] },
+        { "statuszone": [0, 0], "useraccess": [2, 0] },
+        { "statuszone": [0, 0], "useraccess": [1, 0] }
+      ],
+      "expected_events": [["armedChanged", false], ["armedChanged", true], ["armedChanged", false]]
+    },
+    {
+      "name": "only the sensor that changed is emitted",
+      "zones": [[1, "A"], [1, "B"], [1, "C"]],
+      "polls": [
+        { "statuszone": [0, 0, 0], "useraccess": [0, 0] },
+        { "statuszone": [0, 1, 0], "useraccess": [0, 0] },
+        { "statuszone": [0, 1, 1], "useraccess": [0, 0] }
+      ],
+      "expected_events": [["sensorChanged", "1", true], ["sensorChanged", "2", true]]
+    },
+    {
+      "name": "armed and a sensor change in the same poll: armed first",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [1, 0] }, { "statuszone": [1, 0], "useraccess": [2, 0] }],
+      "expected_events": [["armedChanged", false], ["armedChanged", true], ["sensorChanged", "0", true]]
+    },
+    {
+      "name": "several sensors change in one poll: index order",
+      "zones": [[1, "A"], [1, "B"], [1, "C"]],
+      "polls": [{ "statuszone": [0, 0, 0], "useraccess": [0, 0] }, { "statuszone": [1, 0, 1], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "2", true]]
+    },
+    {
+      "name": "open and close in the same poll: both emitted in index order",
+      "zones": [[1, "A"], [1, "B"], [1, "C"]],
+      "polls": [{ "statuszone": [1, 0, 0], "useraccess": [0, 0] }, { "statuszone": [0, 0, 1], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false], ["sensorChanged", "2", true]]
+    },
+    {
+      "name": "twelve zones: indexes are decimal strings emitted in numeric order",
+      "zones": [
+        [1, "A"],
+        [1, "B"],
+        [1, "C"],
+        [1, "D"],
+        [1, "E"],
+        [1, "F"],
+        [1, "G"],
+        [1, "H"],
+        [1, "I"],
+        [1, "J"],
+        [1, "K"],
+        [1, "L"]
+      ],
+      "polls": [{ "statuszone": [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "9", true], ["sensorChanged", "10", true], ["sensorChanged", "11", true]]
+    },
+    {
+      "name": "zones beyond the zone list are ignored",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [0, 0, 1, 1], "useraccess": [0, 0] }],
+      "expected_events": []
+    },
+    {
+      "name": "statuszone shorter than the zone list: missing entries are closed",
+      "zones": [[1, "A"], [1, "B"], [1, "C"]],
+      "polls": [{ "statuszone": [1, 1, 1], "useraccess": [0, 0] }, { "statuszone": [1, 1], "useraccess": [0, 0] }],
+      "expected_events": [
+        ["sensorChanged", "0", true],
+        ["sensorChanged", "1", true],
+        ["sensorChanged", "2", true],
+        ["sensorChanged", "2", false]
+      ]
+    },
+    {
+      "name": "empty statuszone table closes every sensor",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [1, 1], "useraccess": [0, 0] }, { "statuszone": [], "useraccess": [0, 0] }],
+      "expected_events": [
+        ["sensorChanged", "0", true],
+        ["sensorChanged", "1", true],
+        ["sensorChanged", "0", false],
+        ["sensorChanged", "1", false]
+      ]
+    },
+    {
+      "name": "no zones: only the armed state is tracked",
+      "zones": [],
+      "polls": [{ "statuszone": [1, 1], "useraccess": [2, 0] }],
+      "expected_events": [["armedChanged", true]]
+    },
+    {
+      "name": "no zones: nothing else is ever emitted",
+      "zones": [],
+      "polls": [
+        { "statuszone": [1, 1], "useraccess": [2, 0] },
+        { "statuszone": [0, 0], "useraccess": [2, 0] },
+        { "statuszone": [1, 1], "useraccess": [1, 0] }
+      ],
+      "expected_events": [["armedChanged", true], ["armedChanged", false]]
+    },
+    {
+      "name": "the enabled flag and the name of a zone tuple do not matter to the listener",
+      "zones": [[0, " "], [1, "B"]],
+      "polls": [{ "statuszone": [1, 1], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "1", true]],
+      "note": "Disabled zones are filtered out by login(); the listener indexes whatever list it is given."
+    },
+    {
+      "name": "armed and zones change over a longer run",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [
+        { "statuszone": [0, 0], "useraccess": [1, 0] },
+        { "statuszone": [1, 0], "useraccess": [1, 0] },
+        { "statuszone": [1, 1], "useraccess": [7, 0] },
+        { "statuszone": [0, 1], "useraccess": [7, 0] },
+        { "statuszone": [0, 0], "useraccess": [1, 0] }
+      ],
+      "expected_events": [
+        ["armedChanged", false],
+        ["sensorChanged", "0", true],
+        ["armedChanged", true],
+        ["sensorChanged", "1", true],
+        ["sensorChanged", "0", false],
+        ["armedChanged", false],
+        ["sensorChanged", "1", false]
+      ]
+    }
+  ],
+  "failures": [
+    {
+      "name": "a failing first poll emits one error and nothing else",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "fail": { "status": 500 } }],
+      "expected_events": [["error"]]
+    },
+    {
+      "name": "HTTP 404 is an error as well",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "fail": { "status": 404 } }],
+      "expected_events": [["error"]]
+    },
+    {
+      "name": "the poll after a failed first poll is compared with the initial state",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "fail": { "status": 500 } }, { "statuszone": [1, 0], "useraccess": [1, 0] }],
+      "expected_events": [["error"], ["armedChanged", false], ["sensorChanged", "0", true]]
+    },
+    {
+      "name": "a failed poll leaves the last good state untouched: the next identical poll emits nothing",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [
+        { "statuszone": [1, 0], "useraccess": [1, 0] },
+        { "fail": { "status": 500 } },
+        { "statuszone": [1, 0], "useraccess": [1, 0] }
+      ],
+      "expected_events": [["armedChanged", false], ["sensorChanged", "0", true], ["error"]]
+    },
+    {
+      "name": "changes that happened during the outage are emitted by the first good poll after it",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [
+        { "statuszone": [1, 0], "useraccess": [1, 0] },
+        { "fail": { "status": 500 } },
+        { "statuszone": [0, 1], "useraccess": [2, 0] }
+      ],
+      "expected_events": [
+        ["armedChanged", false],
+        ["sensorChanged", "0", true],
+        ["error"],
+        ["armedChanged", true],
+        ["sensorChanged", "0", false],
+        ["sensorChanged", "1", true]
+      ]
+    },
+    {
+      "name": "three failed polls in a row: one error each",
+      "zones": [[1, "A"]],
+      "polls": [{ "fail": { "status": 500 } }, { "fail": { "status": 500 } }, { "fail": { "status": 500 } }],
+      "expected_events": [["error"], ["error"], ["error"]]
+    },
+    {
+      "name": "connection refused is an error, and the listener recovers when the panel is back",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [
+        { "statuszone": [1, 0], "useraccess": [1, 0] },
+        { "fail": { "connection": "refused" } },
+        { "statuszone": [1, 0], "useraccess": [1, 0] }
+      ],
+      "expected_events": [["armedChanged", false], ["sensorChanged", "0", true], ["error"]]
+    },
+    {
+      "name": "connection reset is an error, and the listener recovers",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [
+        { "statuszone": [1, 0], "useraccess": [1, 0] },
+        { "fail": { "connection": "reset" } },
+        { "statuszone": [0, 0], "useraccess": [1, 0] }
+      ],
+      "expected_events": [["armedChanged", false], ["sensorChanged", "0", true], ["error"], ["sensorChanged", "0", false]]
+    },
+    {
+      "name": "a page without status tables is an error",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "fail": { "page": { "file": "data/index_page.html" } } }],
+      "expected_events": [["error"]]
+    },
+    {
+      "name": "an error between two identical armed polls does not re-announce the armed state",
+      "zones": [[1, "A"]],
+      "polls": [
+        { "statuszone": [0, 0], "useraccess": [2, 0] },
+        { "fail": { "status": 500 } },
+        { "statuszone": [0, 0], "useraccess": [2, 0] },
+        { "fail": { "connection": "reset" } },
+        { "statuszone": [0, 0], "useraccess": [2, 0] }
+      ],
+      "expected_events": [["armedChanged", true], ["error"], ["error"]]
+    }
+  ],
+  "status_poll_cadence": [
+    {
+      "name": "no poll at start-up, first poll exactly at 1000 ms",
+      "advance_ms": [0, 999, 1],
+      "expected_requests": [0, 0, 1]
+    },
+    {
+      "name": "one poll per 1000 ms",
+      "advance_ms": [1000, 999, 1, 999, 1],
+      "expected_requests": [1, 1, 2, 2, 3]
+    },
+    { "name": "a long jump runs every missed poll", "advance_ms": [5000], "expected_requests": [5] }
+  ]
+}
