@@ -131,6 +131,20 @@ describe('failed polls', () => {
     expect(logs.error.map(([first]) => first)).toEqual(['nothing to see', expect.stringContaining('tbl_statuszone'), errors[0]]);
   });
 
+  it('no answer: emits the timeout error 10000 ms after the poll was sent, not a millisecond earlier', async () => {
+    const { panel, errors, clock, tick } = await startListener(ZONES);
+    panel.respondWith(POLL, { hang: true }, { times: 1 });
+
+    await tick();
+    await clock.advance(9999);
+    await settle();
+    expect(errors).toEqual([]);
+
+    await clock.advance(1);
+    await waitFor(() => errors.length === 1, { message: 'the timeout error' });
+    expect(errors[0]).toMatchObject({ message: 'timeout of 10000ms exceeded' });
+  });
+
   it('reports a failure through the error event only: the timer callback itself resolves', async () => {
     const { panel, statusListener } = await boot();
     const pollOnce = captureIntervals();

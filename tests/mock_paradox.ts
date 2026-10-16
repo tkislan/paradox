@@ -18,7 +18,8 @@ import { onCleanup } from './support.ts';
  *   GET /statuslive.html?area=00&value=r|d -> arm / disarm, then the status page
  *   GET /keep_alive.html?msgid=1           -> 200
  * What a real panel answers to a failed login, a command, a keep-alive or an expired session was not
- * captured; those responses are plausible stand-ins, so tests must not rely on their bodies.
+ * captured; those responses are plausible stand-ins, so tests must not rely on their bodies. The one guess the bridge
+ * builds on is that an expired session gets the login page: commands and the keep-alive fail on it.
  *
  * `handle()` is pure (request in, response out) so the same contract can be ported to any HTTP mock;
  * `start()` wraps it in a real HTTP server on loopback.

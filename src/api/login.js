@@ -1,6 +1,6 @@
 'use strict';
 
-const axios = require('axios').default;
+const axios = require('./http_client');
 const fs = require('fs');
 
 const { HOSTNAME, USERNAME, PASSWORD } = require('../config');

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { withTitle } from '../support.ts';
 import {
-  FLOW_PATHS, SAMPLE_ZONES, crypto, expectHeaders, expectRequestCounts, golden, outcomeOf, runIndexRetryScenario,
-  runLoginScenario, spec, startBridge, vector, warnings,
+  FLOW_PATHS, SAMPLE_ZONES, crypto, expectHeaders, expectRequestCounts, golden, outcomeOf, runHangScenario,
+  runIndexRetryScenario, runLoginScenario, spec, startBridge, vector, warnings,
 } from '../helpers/login.ts';
-import { expectNoCredentials } from '../helpers/outcomes.ts';
+import { expectNoCredentials, expectTimeout } from '../helpers/outcomes.ts';
 
 describe('login()', () => {
   it('logs in with the encrypted credentials and returns every zone slot', async () => {
@@ -154,6 +154,10 @@ describe('login() index page retry', () => {
   it.each(withTitle(spec.index_retry))('$title', runIndexRetryScenario);
 });
 
+describe('login() against a panel that stops answering', () => {
+  it.each(withTitle(spec.hangs))('$title', runHangScenario);
+});
+
 describe('login() request headers', () => {
   it.each(spec.request_headers)('$name', async (row) => {
     const { panel, login } = await startBridge();
@@ -199,5 +203,11 @@ describe('logout()', () => {
     const outcome = await outcomeOf(logout());
 
     expect(outcome.error?.code).toBe('ECONNREFUSED');
+  });
+
+  it('rejects 10000 ms after the call when the panel never answers', async () => {
+    const { panel, logout } = await startBridge();
+
+    await expectTimeout(panel, '/logout.html', logout);
   });
 });

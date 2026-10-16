@@ -95,7 +95,15 @@ export const StatusPagesSpec = z.strictObject({
     response: z.strictObject({ status: z.number(), body: Text }),
     expected: z.union([z.strictObject({ result: z.null() }), z.strictObject({ error: z.string() })]),
   })),
+  login_page_responses: z.array(z.strictObject({
+    ...row,
+    operation: z.string(),
+    response: z.strictObject({ status: z.number(), body: Text }),
+    expected: z.strictObject({ error: z.string() }),
+  })),
 });
+
+export const KnownBugStatusPagesSpec = StatusPagesSpec.omit({ login_page_responses: true });
 
 // login_cases.json
 
@@ -130,6 +138,14 @@ export const LoginCasesSpec = z.strictObject({
   ...comment,
   login: z.array(LoginRow),
   index_retry: z.array(z.strictObject({ ...row, panel: Responses, expected: LoginOutcome.extend({ index_at_ms: z.array(z.number()) }) })),
+  hangs: z.array(z.strictObject({
+    ...row,
+    panel: Responses,
+    expected: LoginOutcome.omit({ request_counts: true, default_query: true }).extend({
+      requests: z.array(z.tuple([z.number(), z.string()])),
+      settles_at_ms: z.number(),
+    }),
+  })),
   logout: z.array(z.strictObject({ ...row, panel: Responses, expected: z.strictObject({ error: z.string().optional() }) })),
   request_headers: z.array(z.strictObject({
     ...row,
@@ -139,11 +155,6 @@ export const LoginCasesSpec = z.strictObject({
     headers_starting_with: z.record(z.string(), z.string()).optional(),
     absent: z.array(z.string()).optional(),
   })),
-});
-
-export const KnownBugLoginCasesSpec = z.strictObject({
-  ...comment,
-  hangs: z.array(z.strictObject({ ...row, hang: z.string(), expected: z.strictObject({ request_counts: z.record(z.string(), z.number()) }) })),
 });
 
 // status_machine.json

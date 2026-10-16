@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rejection } from '../helpers/outcomes.ts';
+import { expectTimeout, rejection } from '../helpers/outcomes.ts';
 import { html } from '../helpers/responses.ts';
 import { specText, withTitle } from '../support.ts';
 import {
@@ -133,6 +133,12 @@ describe.each(OPERATIONS)('%s() transport', (operation, pathname) => {
     expect(error.code).toBe('ECONNRESET');
     expect(api.panel.requestsTo(pathname)).toHaveLength(1);
   });
+
+  it('rejects 10000 ms after the call when the panel never answers', async () => {
+    const api = await startBridge();
+
+    await expectTimeout(api.panel, pathname, api[operation]);
+  });
 });
 
 describe('sendKeepAlive()', () => {
@@ -143,6 +149,19 @@ describe('sendKeepAlive()', () => {
   });
 
   it.each(withTitle(spec.body_ignoring_responses))('$title', expectKeepAliveOutcome);
+
+  it.each(withTitle(requestRows(spec.login_page_responses, 'sendKeepAlive')))('$title', expectKeepAliveOutcome);
+
+  it('rejects after the session expired, as status polling does', async () => {
+    const { panel, getStatus, sendKeepAlive } = await startBridge({ requireLogin: true });
+    expect(panel.loggedIn).toBe(false);
+
+    const error = await rejection(sendKeepAlive());
+    await rejection(getStatus());
+
+    expect(error.message).toBe('Keep-alive answered with the login page');
+    expect(panel.requestLines).toEqual(['GET /keep_alive.html?msgid=1', 'GET /statuslive.html']);
+  });
 });
 
 describe('requests as sent', () => {

@@ -1,6 +1,6 @@
 'use strict';
 
-const axios = require('axios').default;
+const axios = require('./http_client');
 const fs = require('fs');
 
 const { HOSTNAME } = require('../config');
@@ -9,6 +9,8 @@ const { getJsValue } = require('../util');
 const STATUSZONE_VALUE_RE = /tbl_statuszone[ ]+=[ ]+(new Array\((?:\d,?)*\))/m;
 const USERACCESS_VALUE_RE = /tbl_useraccess[ ]+=[ ]+(new Array\((?:\d,?)*\))/m;
 const ALARMS_VALUE_RE = /tbl_alarmes[ ]+=[ ]+(new Array\((?:"\d",?)*\))/m;
+// Without a session the panel answers with its login page and HTTP 200.
+const LOGIN_PAGE_RE = /loginaff\(/;
 
 
 async function getStatusPage() {
@@ -27,9 +29,8 @@ async function getStatusPage() {
 // }
 
 async function sendKeepAlive() {
-  const randomNumber = Math.random().toString().replace(",", ".").split(".")[1];
-  const params = { msgid: 1, [randomNumber]: null };
-  await axios({ url: `http://${HOSTNAME}/keep_alive.html`, params });
+  const response = await axios({ url: `http://${HOSTNAME}/keep_alive.html`, params: { msgid: 1 } });
+  if (LOGIN_PAGE_RE.test(response.data)) throw new Error('Keep-alive answered with the login page');
 }
 
 async function getParadoxStatus() {

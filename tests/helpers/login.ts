@@ -115,7 +115,39 @@ export async function runIndexRetryScenario(row) {
   await expectScenario(row, bridge, outcome);
 }
 
-export async function expectScenario(row, { panel, output }, outcome) {
+/**
+ * Plays a hangs row on the fake clock: before each time in expected.requests and expected.settles_at_ms the clock stops
+ * 1 ms short, where no new request may have come and login() may not have settled, then moves on to it.
+ */
+export async function runHangScenario(row) {
+  const clock = useFakeClock();
+  const bridge = await startBridge({ responses: row.panel });
+  let outcome;
+  outcomeOf(bridge.login()).then((settled) => { outcome = settled; });
+  const { requests, settles_at_ms: settlesAt } = row.expected;
+  const times = [...new Set([...requests.map(([at]) => at), settlesAt])].sort((a, b) => a - b);
+  const arrivedBy = (time) => requests.filter(([at]) => at <= time).length;
+  let now = 0;
+
+  for (const time of times) {
+    if (time > now) {
+      await clock.advance(time - now - 1);
+      await settle();
+      expect(bridge.panel.requests).toHaveLength(arrivedBy(time - 1));
+      expect(outcome).toBeUndefined();
+      await clock.advance(1);
+      now = time;
+    }
+    await waitFor(() => bridge.panel.requests.length >= arrivedBy(time), { message: `the requests due at ${time} ms` });
+  }
+  await waitFor(() => outcome, { message: `login() to settle at ${settlesAt} ms` });
+  await settle();
+
+  expectOutcome(row, bridge.output, outcome);
+  expect(bridge.panel.requests.map((request) => request.path)).toEqual(requests.map(([, path]) => path));
+}
+
+function expectOutcome(row, output, outcome) {
   if (row.expected.error !== undefined) {
     expect(outcome.value).toBeUndefined();
     expect(outcome.error?.message).toBe(row.expected.error);
@@ -123,6 +155,10 @@ export async function expectScenario(row, { panel, output }, outcome) {
     expect(outcome).toEqual({ value: { zoneTuples: row.expected.zoneTuples } });
   }
   expect(warnings(output)).toEqual(row.expected.warnings ?? []);
+}
+
+export async function expectScenario(row, { panel, output }, outcome) {
+  expectOutcome(row, output, outcome);
   expectRequestCounts(panel, expectedCounts(row));
   if (row.expected.default_query !== undefined) {
     expect(panel.requestsTo('/default.html')[0].url).toBe(`/default.html?${row.expected.default_query}`);

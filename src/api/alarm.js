@@ -1,6 +1,6 @@
 'use strict';
 
-const axios = require('axios').default;
+const axios = require('./http_client');
 
 const { HOSTNAME } = require('../config');
 
@@ -8,14 +8,22 @@ const AREA = '00';
 const ARM = 'r';
 const DISARM = 'd';
 
+// Without a session the panel answers with its login page and HTTP 200, having done nothing.
+const LOGIN_PAGE_RE = /loginaff\(/;
+
+/** @param {string} value */
+async function sendCommand(value) {
+  const params = { area: AREA, value };
+  const response = await axios({ url: `http://${HOSTNAME}/statuslive.html`, params });
+  if (LOGIN_PAGE_RE.test(response.data)) throw new Error('Command answered with the login page');
+}
+
 async function arm() {
-    const params = { area: AREA, value: ARM };
-    await axios({ url: `http://${HOSTNAME}/statuslive.html`, params  });
+  await sendCommand(ARM);
 }
 
 async function disarm() {
-  const params = { area: AREA, value: DISARM };
-  await axios({ url: `http://${HOSTNAME}/statuslive.html`, params  });
+  await sendCommand(DISARM);
 }
 
 module.exports = {

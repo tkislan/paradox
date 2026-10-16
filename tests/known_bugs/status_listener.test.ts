@@ -61,7 +61,7 @@ describe('failed polls', () => {
 });
 
 describe('hung and slow panels', () => {
-  it('KNOWN BUG KB-13: a panel that never answers is never reported; a new poll piles up every second', async () => {
+  it('KNOWN BUG KB-13: while the panel does not answer, a new poll piles up on the pending ones every second', async () => {
     const { panel, events, errors, tick } = await startListener(ZONES);
     panel.respondWith(POLL, { hang: true });
 

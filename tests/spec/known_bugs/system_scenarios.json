@@ -29,30 +29,11 @@
   ],
   "keep_alive": [
     {
-      "name": "keep-alive request every 3000 ms with a bare msgid parameter",
-      "known_bug": "KB-9",
-      "note": "The random cache-buster parameter is dropped by axios because its value is null.",
-      "steps": [
-        {"advance_ms": 2999, "expect": {"panel_requests": ["GET /statuslive.html", "GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}},
-        {"advance_ms": 1, "expect": {"panel_requests_any_order": ["GET /keep_alive.html?msgid=1", "GET /statuslive.html"]}},
-        {"advance_ms": 3000, "expect": {"panel_requests_any_order": ["GET /statuslive.html", "GET /statuslive.html", "GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}}
-      ]
-    },
-    {
       "name": "a keep-alive answered with HTTP 500 is only logged",
       "known_bug": "KB-12",
       "note": "Unlike a status poll, a keep-alive failure never reaches the exit handler.",
       "steps": [
         {"panel_fault": {"path": "/keep_alive.html", "kind": "http_500", "times": 1}, "advance_ms": 3000, "expect": {"logged_error": true, "panel_requests_any_order": ["GET /statuslive.html", "GET /statuslive.html", "GET /statuslive.html", "GET /keep_alive.html?msgid=1"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}},
-        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}}
-      ]
-    },
-    {
-      "name": "a keep-alive answered with the login page is not an error",
-      "known_bug": "KB-12",
-      "note": "The response body is never inspected, so an expired session goes unnoticed by the keep-alive.",
-      "steps": [
-        {"panel_fault": {"path": "/keep_alive.html", "kind": "login_page", "times": 1}, "advance_ms": 3000, "expect": {"logged_error": false, "panel_requests_any_order": ["GET /statuslive.html", "GET /statuslive.html", "GET /statuslive.html", "GET /keep_alive.html?msgid=1"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}},
         {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}}
       ]
     }
@@ -160,14 +141,6 @@
         {"mqtt_command": "disarm", "expect": {"panel_requests": ["GET /statuslive.html?area=00&value=d"]}},
         {"mqtt_command": "arm", "expect": {"panel_requests": ["GET /statuslive.html?area=00&value=r"]}}
       ]
-    },
-    {
-      "name": "a command answered with the login page after session expiry counts as success",
-      "known_bug": "KB-14",
-      "note": "The response is ignored, so the lost session goes unnoticed and nothing is armed.",
-      "steps": [
-        {"panel_expire_session": true, "mqtt_command": "arm", "expect": {"logged_error": false, "panel_requests": ["GET /statuslive.html?area=00&value=r"]}}
-      ]
     }
   ],
   "failures": [
@@ -218,9 +191,9 @@
       ]
     },
     {
-      "name": "a poll that never gets an answer never times out and the next poll overlaps it",
+      "name": "a poll that gets no answer does not hold back the next poll, which overlaps it",
       "known_bug": "KB-13",
-      "note": "No HTTP timeout and no in-flight guard: the second poll goes out while the first is still pending.",
+      "note": "No in-flight guard: the second poll goes out while the first is still pending; that one fails only at its 10000 ms timeout.",
       "steps": [
         {"panel_fault": {"path": "/statuslive.html", "kind": "hang", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}},
         {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}},
