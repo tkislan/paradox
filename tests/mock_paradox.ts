@@ -14,7 +14,7 @@ import { onCleanup } from './support.ts';
  *   GET /login_page.html                   -> page containing loginaff("<session value>", ...)
  *   GET /default.html?u=<..>&p=<..>        -> "Paradox IP Module" page on success, the login page otherwise
  *   GET /index.html                        -> page containing tbl_zone = new Array(<area bitmask>,"<name>",...)
- *   GET /statuslive.html                   -> page containing tbl_statuszone / tbl_useraccess / tbl_alarmes
+ *   GET /statuslive.html                   -> page containing tbl_statuszone / tbl_useraccess / tbl_alarmes / tbl_troubles
  *   GET /statuslive.html?area=00&value=r|d -> arm / disarm, then the status page
  *   GET /keep_alive.html?msgid=1           -> 200
  * What a real panel answers to a failed login, a command, a keep-alive or an expired session was not
@@ -61,10 +61,11 @@ export function renderIndexPage(zones: Zone[]) {
   return swap(TEMPLATES.index, /tbl_zone = new Array\([^)]*\)/, `tbl_zone = new Array(${array})`);
 }
 
-function renderStatusPage({ statuszone, useraccess, alarms = [] }: { statuszone: number[]; useraccess: number[]; alarms?: string[] }) {
+function renderStatusPage({ statuszone, useraccess, alarms = [], troubles = [] }: { statuszone: number[]; useraccess: number[]; alarms?: string[]; troubles?: string[] }) {
   let page = swap(TEMPLATES.status, /tbl_statuszone = new Array\([^)]*\)/, `tbl_statuszone = new Array(${statuszone.join(',')})`);
   page = swap(page, /tbl_useraccess = new Array\([^)]*\)/, `tbl_useraccess = new Array(${useraccess.join(',')})`);
-  return swap(page, /tbl_alarmes = new Array\([^)]*\)/, `tbl_alarmes = new Array(${alarms.map((a) => `"${a}"`).join(',')})`);
+  page = swap(page, /tbl_alarmes = new Array\([^)]*\)/, `tbl_alarmes = new Array(${alarms.map((a) => `"${a}"`).join(',')})`);
+  return swap(page, /tbl_troubles = new Array\([^)]*\)/, `tbl_troubles = new Array(${troubles.map((t) => `"${t}"`).join(',')})`);
 }
 
 // IncomingMessage types both as optional because client responses share the class; a server's requests always have them.
@@ -116,6 +117,7 @@ export class FakePanel {
   useraccess: number[];
   requireLogin: boolean;
   alarms: string[];
+  troubles: string[];
   loggedIn: boolean;
   requests: PanelRequest[];
   overrides: Override[];
@@ -140,6 +142,7 @@ export class FakePanel {
     this.useraccess = useraccess;
     this.requireLogin = requireLogin;
     this.alarms = [];
+    this.troubles = [];
 
     this.loggedIn = false;
     this.requests = [];
@@ -163,10 +166,11 @@ export class FakePanel {
   }
 
   /** Merges new data-page state; subsequent status pages reflect it. */
-  setStatus({ statuszone, useraccess, alarms }: { statuszone?: number[]; useraccess?: number[]; alarms?: string[] }) {
+  setStatus({ statuszone, useraccess, alarms, troubles }: { statuszone?: number[]; useraccess?: number[]; alarms?: string[]; troubles?: string[] }) {
     if (statuszone) this.statuszone = statuszone;
     if (useraccess) this.useraccess = useraccess;
     if (alarms) this.alarms = alarms;
+    if (troubles) this.troubles = troubles;
   }
 
   /** Drops the session, as if it timed out or another login took it over. */

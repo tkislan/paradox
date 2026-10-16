@@ -79,7 +79,7 @@ function statusListener(zoneTuples) {
     statusEventEmitter.emit('sensorChanged', index, prevStatus.sensors[index]);
   }
   
-  let prevRawStatus = { statuszone: [], useraccess: [], alarms: [] };
+  let prevRawStatus = { statuszone: [], useraccess: [], alarms: [], troubles: [] };
   async function poll() {
     let rawStatus;
     try {
@@ -90,7 +90,7 @@ function statusListener(zoneTuples) {
       return;
     }
 
-    for (const key of ['statuszone', 'useraccess', 'alarms']) {
+    for (const key of ['statuszone', 'useraccess', 'alarms', 'troubles']) {
       if (!deepArrayEqual(prevRawStatus[key], rawStatus[key])) {
         console.log(`${key} changed`);
         console.log(prevRawStatus[key].join(','));

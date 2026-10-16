@@ -18,16 +18,30 @@ describe('getStatus() page parsing', () => {
 
     expect(error.name).toBe('SyntaxError');
   });
+
+  it('rejects a long run of digits that ends in garbage at once, instead of retrying every way to split it', async () => {
+    const { panel, getStatus } = await startBridge();
+    panel.respondWith('/statuslive.html', html(`tbl_statuszone = new Array(1,0);var stayd="0";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array();tbl_troubles = new Array(${'1'.repeat(30)}a);`));
+
+    const started = performance.now();
+    const error = await rejection(getStatus());
+
+    expect(error.message).toBe("Regex didn't match the value");
+    // A pattern with every separator optional needs about 4 s for these 30 digits, and 4 times as long per 2 more.
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
 });
 
 describe('getStatus() against the fake panel', () => {
   it('returns the panel state as served', async () => {
     const { panel, getStatus } = await startBridge({ statuszone: [1, 0, 5, ...new Array(29).fill(0)], useraccess: [2, 0] });
+    panel.setStatus({ alarms: ['1'], troubles: ['16', '38'] });
 
     expect(await getStatus()).toEqual({
       statuszone: [1, 0, 5, ...new Array(29).fill(0)],
       useraccess: [2, 0],
-      alarms: [0],
+      alarms: [1],
+      troubles: [16, 38],
     });
     expect(panel.requestLines).toEqual(['GET /statuslive.html']);
   });
@@ -36,11 +50,11 @@ describe('getStatus() against the fake panel', () => {
     const { panel, getStatus } = await startBridge({ useraccess: [1, 0] });
 
     const before = await getStatus();
-    panel.setStatus({ useraccess: [2, 0], statuszone: [0, 1, ...new Array(30).fill(0)] });
+    panel.setStatus({ useraccess: [2, 0], statuszone: [0, 1, ...new Array(30).fill(0)], alarms: ['1'], troubles: ['19'] });
     const after = await getStatus();
 
     expect(before.useraccess).toEqual([1, 0]);
-    expect(after).toEqual({ statuszone: [0, 1, ...new Array(30).fill(0)], useraccess: [2, 0], alarms: [0] });
+    expect(after).toEqual({ statuszone: [0, 1, ...new Array(30).fill(0)], useraccess: [2, 0], alarms: [1], troubles: [19] });
   });
 
   it('concurrent calls each make their own request and all resolve', async () => {
@@ -64,9 +78,12 @@ describe('getStatus() against the fake panel', () => {
   it('finds the tables after a megabyte of other content', async () => {
     const { panel, getStatus } = await startBridge();
     const filler = `<!-- ${'x'.repeat(1024 * 1024)} -->`;
-    panel.respondWith('/statuslive.html', html(`${filler}tbl_statuszone = new Array(1,2);tbl_useraccess = new Array(2,0);`));
+    panel.respondWith(
+      '/statuslive.html',
+      html(`${filler}tbl_statuszone = new Array(1,2);tbl_useraccess = new Array(2,0);tbl_alarmes = new Array("1");tbl_troubles = new Array("38");`),
+    );
 
-    expect(await getStatus()).toEqual({ statuszone: [1, 2], useraccess: [2, 0], alarms: [0] });
+    expect(await getStatus()).toEqual({ statuszone: [1, 2], useraccess: [2, 0], alarms: [1], troubles: [38] });
   });
 });
 

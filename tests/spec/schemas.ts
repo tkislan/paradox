@@ -79,7 +79,9 @@ export const StatusPagesSpec = z.strictObject({
     ...row,
     page: Text,
     expected: z.union([
-      z.strictObject({ statuszone: z.array(z.number()), useraccess: z.array(z.number()), alarms: z.array(z.number()) }),
+      z.strictObject({
+        statuszone: z.array(z.number()), useraccess: z.array(z.number()), alarms: z.array(z.number()), troubles: z.array(z.number()),
+      }),
       z.strictObject({ error: z.string() }),
     ]),
   })),
@@ -103,7 +105,7 @@ export const StatusPagesSpec = z.strictObject({
   })),
 });
 
-export const KnownBugStatusPagesSpec = StatusPagesSpec.omit({ login_page_responses: true });
+export const KnownBugStatusPagesSpec = StatusPagesSpec.omit({ get_status: true, login_page_responses: true });
 
 // login_cases.json
 
@@ -231,7 +233,7 @@ const Expect = z.strictObject({
 export type Expect = z.infer<typeof Expect>;
 
 const Step = z.strictObject({
-  panel_status: z.strictObject({ ...PanelState, alarms: z.array(z.string()).optional() }).optional(),
+  panel_status: z.strictObject({ ...PanelState, alarms: z.array(z.string()).optional(), troubles: z.array(z.string()).optional() }).optional(),
   panel_fault: PanelFault.optional(),
   panel_expire_session: z.boolean().optional(),
   panel_down: z.boolean().optional(),

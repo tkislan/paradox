@@ -1,13 +1,5 @@
 {
   "_comment": "Rows of ../status_pages.json that pin a defect of the current code on purpose (known_bug: the catalog id in tests/README.md), moved here unchanged: the same groups and the same row format, which the comment of that file describes. A port does not have to reproduce any of them.",
-  "get_status": [
-    {
-      "name": "tbl_alarmes entries are ignored and alarms is always [0]",
-      "page": "tbl_statuszone = new Array(1,0);var stayd=\"0\";tbl_useraccess = new Array(2,0);tbl_alarmes = new Array(\"3\",\"4\");tbl_troubles = new Array(\"16\",\"19\");",
-      "expected": { "statuszone": [1, 0], "useraccess": [2, 0], "alarms": [0] },
-      "known_bug": "KB-15"
-    }
-  ],
   "requests": [
     {
       "operation": "arm",

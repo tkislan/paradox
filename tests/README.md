@@ -25,7 +25,7 @@ The tests are TypeScript that vitest runs as is (it strips the types, nothing is
 checks them together with `src/`, with the same settings: `strict`, but unannotated parameters allowed (`any`).
 `tests/package.json` marks them as ES modules, which they are under vitest.
 
-About 650 tests, 10 s. `npx vitest run --exclude 'tests/known_bugs/**'` skips the 38 that pin a defect. In agent/CI
+About 710 tests, 10 s. `npx vitest run --exclude 'tests/known_bugs/**'` skips the 37 that pin a defect. In agent/CI
 environments vitest may pick a reporter that hides console output; use `npx vitest run --reporter=default` to see
 whether a change made the suite noisy (it must stay silent).
 
@@ -38,7 +38,7 @@ versions production installs.
 
 ## Coverage
 
-95.3 % of lines, 96.9 % of branches. Dead code in `src/` is not covered: the `default:` case of the sensor handler
+95.3 % of lines, 97.0 % of branches. Dead code in `src/` is not covered: the `default:` case of the sensor handler
 (`app.js:46`, the value is always a boolean) and `initSensorStatus` (`status_listener.js:48-50`, never called).
 Deliberately without a test, because a Home Assistant integration has nothing like them: the REST API (`app.js`),
 signal handling (`signal.js`), the missing-variable check (`config.js`), MQTT connection failures (`mqtt_link.js`) and
@@ -125,6 +125,10 @@ projects), then the parsing tables (`status_pages`, `login_cases`), then `status
 - Rows with `"known_bug"` (all in `spec/known_bugs/`, skip that directory) carry today's (wrong) result as `expected`;
   they mark decisions, not behavior to copy.
 - Rows with `"js_only"` (one `rc4` vector in `crypto.json`) depend on JavaScript semantics (`NaN`).
+- A `get_status` row's `expected` is the whole result of `getStatus()`: `statuszone`, `useraccess`, `alarms` and
+  `troubles`, the last two as numbers (see "Panel facts" for their meaning). A status page that does not contain the name
+  `tbl_alarmes` or `tbl_troubles` at all gives an empty list, a choice since every captured page has both; a page that
+  names the table without an assignment in the expected format fails like the other tables.
 - `panel_requests_ignored` in a scenario step names requests the row takes no side on: the poll of a tick that falls
   on the same millisecond as a request timeout.
 - Error strings that come from axios or V8 (`Request failed with status code 500`, `timeout of 10000ms exceeded`,
@@ -158,7 +162,7 @@ git restore src/util.js
 
 Each row is pinned by tests titled `KNOWN BUG KB-n: ...` (files in `known_bugs/`, named like the test file they
 were split from) and by spec rows with `"known_bug": "KB-n"` (files in `spec/known_bugs/`). "Port" is a suggestion,
-not something the tests assert. The ids are not renumbered: KB-1, 2, 3, 5, 9, 10, 11, 12, 13, 21, 23, 35, 39 and 40
+not something the tests assert. The ids are not renumbered: KB-1, 2, 3, 5, 9, 10, 11, 12, 13, 15, 21, 23, 35, 39 and 40
 are missing because they are fixed, and KB-7, 8, 17, 19, 20, 24 to 26, 29 to 34, 37, 38 and 41 to 43 because the
 tests that pinned them were removed: those of `config.js`, `mqtt_link.js` and `signal.js`, the child-process tests, and
 the MQTT connection, REST API, shutdown and configuration scenarios.
@@ -168,7 +172,6 @@ the MQTT connection, REST API, shutdown and configuration scenarios.
 | KB-4 | Startup events are emitted before anyone can listen. Initial state is assumed (armed unknown, all sensors closed), so only *differences* are published after a start: closed sensors publish nothing and retained topics keep stale values | `status_machine.json`, `system_scenarios.json` | publish the full state at start |
 | KB-6 | `deepArrayEqual` is shallow and never equal for `NaN` (only affects log output) | `util.json` | - |
 | KB-14 | `arm`/`disarm` judge only the final response, after following redirects, and of the 2xx ones fail only on the login page (what an expired session gets): any other 2xx body, unrelated text or another page a redirect lands on, is success | `status_pages.json`, `alarm.test.ts` | verify the state change |
-| KB-15 | Alarm and trouble tables are never parsed (`alarms` is always `[0]`) | `status_pages.json` | parse them |
 | KB-16 | Any payload on `paradox/command/arm|disarm` triggers the command | `system_scenarios.json` | validate payload |
 | KB-18 | The armed state and the commands cover area 1 only: the armed state is read from `useraccess[0]` alone (`parseInt` of the whole table) and commands always send `area=00` | `status_machine.json`, `status_pages.json`, `system_scenarios.json` | all areas |
 | KB-22 | `useraccess` 3 (in alarm) is "unknown" like an unused area and publishes nothing, so an alarm is never reported | `status_machine.json` | report the alarm |
@@ -193,6 +196,15 @@ before trusting them for the port.
   The bridge maps 2, 4, 5, 6, 7 and 10 to armed, 1, 8 and 9 to disarmed, and 0, 3 and unknown codes to "unknown", which publishes
   nothing; that *in alarm* (3) stays unknown is KB-22.
   `tests/data/armed.html` was captured during exit delay (7).
+- `tbl_alarmes`: the areas in alarm, as 0-based indexes into `tbl_areanam` on `index.html` (the panel shows
+  `Area <i+1> - <name>`; `stal` in `commun.js`). That its entries are quoted decimal strings, like those of `tbl_troubles`,
+  is inferred: no public capture shows a non-empty one, and both captures here have `new Array()`.
+- `tbl_troubles`: the active system troubles, as 0-based indexes into `tbl_troublename` on `index.html`, written as quoted
+  decimal strings (`sttr` in `commun.js`). Both captures carry `"16","19","38"`, on the captured index page (44 names,
+  then an empty entry) Bell output disconnected, time and date lost, tamper on the PCS module. An empty table does not
+  prove that the panel has no troubles: a Home Assistant forum post (#579 in 'paradox-alarm-mqtt-hassio-addon', not
+  verified either) saw one while the keypad showed low-battery troubles.
+  The bridge returns both from `getStatus()` as numbers (`alarms`, `troubles`) and publishes neither.
 - `tbl_zone`: the first number of each pair is an **area bitmask**, not an enabled flag. The bridge keeps every slot with a non-zero
   bitmask, as `paradox/sensor/<slot>` (0-based, the same position in `tbl_statuszone`); armed state and commands still cover area 1
   only (KB-18).

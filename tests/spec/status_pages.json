@@ -1,5 +1,5 @@
 {
-  "_comment": "Pages and responses the Paradox panel gives to the bridge, and what src/api/status.js and src/api/alarm.js make of them. \"page\" / \"response.body\" is an inline string or {\"file\": \"<path relative to tests/>\"}. \"error\" is the exact message of the failure; messages other than the parse error and the bridge's own \"... answered with the login page\" come from the JavaScript HTTP client (axios 0.18) and only the fact of failing is portable. body_ignoring_responses apply alike to arm, disarm and sendKeepAlive; login_page_responses are per operation: a command or keep-alive answered with the login page (what the fake panel serves without a session, see README.md) fails. Rows with a known_bug (catalog in README.md) are in known_bugs/status_pages.json, in the same groups.",
+  "_comment": "Pages and responses the Paradox panel gives to the bridge, and what src/api/status.js and src/api/alarm.js make of them. \"page\" / \"response.body\" is an inline string or {\"file\": \"<path relative to tests/>\"}. A get_status \"expected\" is the whole result of getStatus(): statuszone and useraccess as the panel writes them, alarms (the areas in alarm) and troubles (the active troubles) as 0-based indexes into tbl_areanam and tbl_troublename of the index page; a page that does not contain the name tbl_alarmes or tbl_troubles at all reads that list as empty, and one that contains the name without a table in the expected format fails like the other tables. \"error\" is the exact message of the failure; messages other than the parse error and the bridge's own \"... answered with the login page\" come from the JavaScript HTTP client (axios 0.18) and only the fact of failing is portable. body_ignoring_responses apply alike to arm, disarm and sendKeepAlive; login_page_responses are per operation: a command or keep-alive answered with the login page (what the fake panel serves without a session, see README.md) fails. Rows with a known_bug (catalog in README.md) are in known_bugs/status_pages.json, in the same groups.",
   "get_status": [
     {
       "name": "armed panel capture",
@@ -7,9 +7,10 @@
       "expected": {
         "statuszone": [5, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         "useraccess": [7, 0],
-        "alarms": [0]
+        "alarms": [],
+        "troubles": [16, 19, 38]
       },
-      "note": "The capture also carries tbl_alarmes = new Array() and three tbl_troubles entries; neither reaches the result."
+      "note": "tbl_alarmes = new Array(): no area in alarm. tbl_troubles = new Array(\"16\",\"19\",\"38\"): on the captured index page, Bell output disconnected, time and date lost, tamper on the PCS module."
     },
     {
       "name": "unarmed panel capture",
@@ -17,38 +18,39 @@
       "expected": {
         "statuszone": [5, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         "useraccess": [1, 0],
-        "alarms": [0]
+        "alarms": [],
+        "troubles": [16, 19, 38]
       }
     },
     {
       "name": "empty tables give empty lists",
       "page": "tbl_statuszone = new Array();var stayd=\"0\";tbl_useraccess = new Array();",
-      "expected": { "statuszone": [], "useraccess": [], "alarms": [0] }
+      "expected": { "statuszone": [], "useraccess": [], "alarms": [], "troubles": [] }
     },
     {
       "name": "values of two or more digits are kept whole",
       "page": "tbl_statuszone = new Array(10,25,3,255);var stayd=\"0\";tbl_useraccess = new Array(12,0);",
-      "expected": { "statuszone": [10, 25, 3, 255], "useraccess": [12, 0], "alarms": [0] }
+      "expected": { "statuszone": [10, 25, 3, 255], "useraccess": [12, 0], "alarms": [], "troubles": [] }
     },
     {
       "name": "a single-value zone table is a list of that one value",
       "page": "tbl_statuszone = new Array(7);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
-      "expected": { "statuszone": [7], "useraccess": [1, 0], "alarms": [0] }
+      "expected": { "statuszone": [7], "useraccess": [1, 0], "alarms": [], "troubles": [] }
     },
     {
       "name": "a single-value useraccess table is a list of that one value",
       "page": "tbl_statuszone = new Array(0,0);var stayd=\"0\";tbl_useraccess = new Array(2);",
-      "expected": { "statuszone": [0, 0], "useraccess": [2], "alarms": [0] }
+      "expected": { "statuszone": [0, 0], "useraccess": [2], "alarms": [], "troubles": [] }
     },
     {
       "name": "a single zero value is a list of one zero",
       "page": "tbl_statuszone = new Array(0);var stayd=\"0\";tbl_useraccess = new Array(0);",
-      "expected": { "statuszone": [0], "useraccess": [0], "alarms": [0] }
+      "expected": { "statuszone": [0], "useraccess": [0], "alarms": [], "troubles": [] }
     },
     {
       "name": "a single value of 2^32 is read as that number",
       "page": "tbl_statuszone = new Array(4294967296);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
-      "expected": { "statuszone": [4294967296], "useraccess": [1, 0], "alarms": [0] }
+      "expected": { "statuszone": [4294967296], "useraccess": [1, 0], "alarms": [], "troubles": [] }
     },
     {
       "name": "32 zones are all returned",
@@ -56,7 +58,8 @@
       "expected": {
         "statuszone": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1],
         "useraccess": [2, 0],
-        "alarms": [0]
+        "alarms": [],
+        "troubles": []
       }
     },
     {
@@ -65,48 +68,102 @@
       "expected": {
         "statuszone": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8],
         "useraccess": [1, 0],
-        "alarms": [0]
+        "alarms": [],
+        "troubles": []
       }
     },
     {
       "name": "trailing comma is accepted",
-      "page": "tbl_statuszone = new Array(1,2,);var stayd=\"0\";tbl_useraccess = new Array(1,0,);",
-      "expected": { "statuszone": [1, 2], "useraccess": [1, 0], "alarms": [0] }
+      "page": "tbl_statuszone = new Array(1,2,);var stayd=\"0\";tbl_useraccess = new Array(1,0,);tbl_alarmes = new Array(\"0\",);tbl_troubles = new Array(\"16\",\"38\",);",
+      "expected": { "statuszone": [1, 2], "useraccess": [1, 0], "alarms": [0], "troubles": [16, 38] }
     },
     {
       "name": "tables are found anywhere in the page",
       "page": "<html><script>var a=1;\ntbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);\nvar b=2;</script></html>",
-      "expected": { "statuszone": [1, 2], "useraccess": [1, 0], "alarms": [0] }
+      "expected": { "statuszone": [1, 2], "useraccess": [1, 0], "alarms": [], "troubles": [] }
     },
     {
       "name": "tables may come in the opposite order",
       "page": "tbl_useraccess = new Array(1,0);var stayd=\"0\";tbl_statuszone = new Array(3,4);",
-      "expected": { "statuszone": [3, 4], "useraccess": [1, 0], "alarms": [0] }
+      "expected": { "statuszone": [3, 4], "useraccess": [1, 0], "alarms": [], "troubles": [] }
     },
     {
       "name": "several spaces around = are accepted",
-      "page": "tbl_statuszone   =   new Array(1,2);tbl_useraccess  =  new Array(1,0);",
-      "expected": { "statuszone": [1, 2], "useraccess": [1, 0], "alarms": [0] }
+      "page": "tbl_statuszone   =   new Array(1,2);tbl_useraccess  =  new Array(1,0);tbl_alarmes   =   new Array(\"0\");tbl_troubles  =  new Array(\"16\");",
+      "expected": { "statuszone": [1, 2], "useraccess": [1, 0], "alarms": [0], "troubles": [16] }
     },
     {
       "name": "CRLF line endings between the tables are accepted",
       "page": "tbl_statuszone = new Array(1,2);\r\ntbl_useraccess = new Array(1,0);\r\n",
-      "expected": { "statuszone": [1, 2], "useraccess": [1, 0], "alarms": [0] }
+      "expected": { "statuszone": [1, 2], "useraccess": [1, 0], "alarms": [], "troubles": [] }
     },
     {
       "name": "table name preceded by other characters still matches",
-      "page": "xtbl_statuszone = new Array(1,2);xtbl_useraccess = new Array(1,0);",
-      "expected": { "statuszone": [1, 2], "useraccess": [1, 0], "alarms": [0] }
+      "page": "xtbl_statuszone = new Array(1,2);xtbl_useraccess = new Array(1,0);xtbl_alarmes = new Array(\"0\");xtbl_troubles = new Array(\"16\");",
+      "expected": { "statuszone": [1, 2], "useraccess": [1, 0], "alarms": [0], "troubles": [16] }
     },
     {
       "name": "first table wins when it appears twice",
-      "page": "tbl_statuszone = new Array(1,1);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_statuszone = new Array(2,2);var stayd=\"0\";tbl_useraccess = new Array(2,0);",
-      "expected": { "statuszone": [1, 1], "useraccess": [1, 0], "alarms": [0] }
+      "page": "tbl_statuszone = new Array(1,1);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array(\"0\");tbl_troubles = new Array(\"16\");tbl_statuszone = new Array(2,2);var stayd=\"0\";tbl_useraccess = new Array(2,0);tbl_alarmes = new Array(\"1\");tbl_troubles = new Array(\"19\");",
+      "expected": { "statuszone": [1, 1], "useraccess": [1, 0], "alarms": [0], "troubles": [16] }
     },
     {
       "name": "a malformed first table is skipped in favour of a later valid one",
-      "page": "tbl_statuszone = new Array(-1,1);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_statuszone = new Array(2,2);var stayd=\"0\";tbl_useraccess = new Array(2,0);",
-      "expected": { "statuszone": [2, 2], "useraccess": [1, 0], "alarms": [0] }
+      "page": "tbl_statuszone = new Array(-1,1);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array(\"-1\");tbl_troubles = new Array(\"-1\");tbl_statuszone = new Array(2,2);var stayd=\"0\";tbl_useraccess = new Array(2,0);tbl_alarmes = new Array(\"1\");tbl_troubles = new Array(\"19\");",
+      "expected": { "statuszone": [2, 2], "useraccess": [1, 0], "alarms": [1], "troubles": [19] }
+    },
+    {
+      "name": "areas in alarm and active troubles are read from their quoted entries as numbers",
+      "page": "tbl_statuszone = new Array(1,0);var stayd=\"0\";tbl_useraccess = new Array(2,0);tbl_alarmes = new Array(\"3\",\"4\");tbl_troubles = new Array(\"16\",\"19\");",
+      "expected": { "statuszone": [1, 0], "useraccess": [2, 0], "alarms": [3, 4], "troubles": [16, 19] }
+    },
+    {
+      "name": "area index 0 (area 1) is kept among the areas in alarm",
+      "page": "tbl_statuszone = new Array(2,0);var stayd=\"0\";tbl_useraccess = new Array(3,1,3);tbl_alarmes = new Array(\"0\",\"2\");tbl_troubles = new Array();",
+      "expected": { "statuszone": [2, 0], "useraccess": [3, 1, 3], "alarms": [0, 2], "troubles": [] }
+    },
+    {
+      "name": "indexes of two or more digits are kept whole",
+      "page": "tbl_statuszone = new Array(0,0);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array(\"10\");tbl_troubles = new Array(\"9\",\"10\",\"44\");",
+      "expected": { "statuszone": [0, 0], "useraccess": [1, 0], "alarms": [10], "troubles": [9, 10, 44] },
+      "note": "The captured index page names two areas and 44 troubles (indexes 0 to 43, then one empty entry); the pattern takes any number."
+    },
+    {
+      "name": "unquoted indexes are accepted",
+      "page": "tbl_statuszone = new Array(0,0);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array(0,1);tbl_troubles = new Array(16,38);",
+      "expected": { "statuszone": [0, 0], "useraccess": [1, 0], "alarms": [0, 1], "troubles": [16, 38] },
+      "note": "The captures write tbl_troubles with quoted entries; that tbl_alarmes is written the same way is inferred (README.md, Panel facts)."
+    },
+    {
+      "name": "a page without tbl_alarmes and tbl_troubles reads both as empty",
+      "page": "tbl_statuszone = new Array(1,0);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
+      "expected": { "statuszone": [1, 0], "useraccess": [1, 0], "alarms": [], "troubles": [] },
+      "note": "A decision, not panel behavior: every captured status page carries both tables. Only a page that does not contain the table name at all reads as empty."
+    },
+    {
+      "name": "tbl_troublename (the trouble names of the index page) is not read as tbl_troubles",
+      "page": "tbl_statuszone = new Array(1,0);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array();tbl_troublename = new Array(\"Bell disconnected\",\"Time lost\");",
+      "expected": { "statuszone": [1, 0], "useraccess": [1, 0], "alarms": [], "troubles": [] }
+    },
+    {
+      "name": "a page with tbl_alarmes but without tbl_troubles reads only the troubles as empty",
+      "page": "tbl_statuszone = new Array(1,0);var stayd=\"0\";tbl_useraccess = new Array(3,0);tbl_alarmes = new Array(\"0\");",
+      "expected": { "statuszone": [1, 0], "useraccess": [3, 0], "alarms": [0], "troubles": [] }
+    },
+    {
+      "name": "a page with tbl_troubles but without tbl_alarmes reads only the alarms as empty",
+      "page": "tbl_statuszone = new Array(1,0);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_troubles = new Array(\"16\");",
+      "expected": { "statuszone": [1, 0], "useraccess": [1, 0], "alarms": [], "troubles": [16] }
+    },
+    {
+      "name": "quoted and unquoted indexes may be mixed in one table",
+      "page": "tbl_statuszone = new Array(0,0);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array(\"0\",1);tbl_troubles = new Array(16,\"38\");",
+      "expected": { "statuszone": [0, 0], "useraccess": [1, 0], "alarms": [0, 1], "troubles": [16, 38] }
+    },
+    {
+      "name": "indexes are returned in the order served, duplicates kept",
+      "page": "tbl_statuszone = new Array(0,0);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array(\"1\",\"0\",\"1\");tbl_troubles = new Array(\"38\",\"16\",\"16\");",
+      "expected": { "statuszone": [0, 0], "useraccess": [1, 0], "alarms": [1, 0, 1], "troubles": [38, 16, 16] }
     },
     {
       "name": "a space after a comma is rejected in tbl_statuszone",
@@ -299,6 +356,217 @@
       "page": "tbl_statuszone = new Array(1,2);tbl_useraccess = new Array(\u0663,2);",
       "expected": { "error": "Regex didn't match the value" },
       "note": "JavaScript \\d matches only the ASCII digits 0-9; Python str patterns also match other Unicode digits unless re.ASCII is set."
+    },
+    {
+      "name": "a space after a comma is rejected in tbl_alarmes",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array(\"1\", \"2\");tbl_troubles = new Array();",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a space after a comma is rejected in tbl_troubles",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array();tbl_troubles = new Array(\"16\", \"38\");",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a line break inside the array is rejected in tbl_alarmes",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array(\"1\",\n\"2\");tbl_troubles = new Array();",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a line break inside the array is rejected in tbl_troubles",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array();tbl_troubles = new Array(\"16\",\n\"38\");",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a leading comma is rejected in tbl_alarmes",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array(,\"1\");tbl_troubles = new Array();",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a leading comma is rejected in tbl_troubles",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array();tbl_troubles = new Array(,\"16\");",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a doubled comma is rejected in tbl_alarmes",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array(\"1\",,\"2\");tbl_troubles = new Array();",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a doubled comma is rejected in tbl_troubles",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array();tbl_troubles = new Array(\"16\",,\"38\");",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a negative value is rejected in tbl_alarmes",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array(\"-1\");tbl_troubles = new Array();",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a negative value is rejected in tbl_troubles",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array();tbl_troubles = new Array(\"-1\");",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a decimal value is rejected in tbl_alarmes",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array(\"1.5\");tbl_troubles = new Array();",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a decimal value is rejected in tbl_troubles",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array();tbl_troubles = new Array(\"16.5\");",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a letter among the values is rejected in tbl_alarmes",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array(\"a\");tbl_troubles = new Array();",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a letter among the values is rejected in tbl_troubles",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array();tbl_troubles = new Array(\"a\");",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "an unbalanced quote is rejected in tbl_alarmes",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array(\"1);tbl_troubles = new Array();",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "an unbalanced quote is rejected in tbl_troubles",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array();tbl_troubles = new Array(1\"2\");",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "entries without a comma between them are rejected in tbl_troubles",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array();tbl_troubles = new Array(\"16\"\"19\");",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "an array literal instead of new Array is rejected in tbl_alarmes",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = [\"1\"];tbl_troubles = new Array();",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "an array literal instead of new Array is rejected in tbl_troubles",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array();tbl_troubles = [\"16\"];",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "Array without new is rejected in tbl_alarmes",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = Array(\"1\");tbl_troubles = new Array();",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "Array without new is rejected in tbl_troubles",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array();tbl_troubles = Array(\"16\");",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a missing closing parenthesis is rejected in tbl_alarmes",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array(\"1\";tbl_troubles = new Array();",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a missing closing parenthesis is rejected in tbl_troubles",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array();tbl_troubles = new Array(\"16\";",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "no spaces around = is rejected in tbl_alarmes",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes=new Array(\"1\");tbl_troubles = new Array();",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "no spaces around = is rejected in tbl_troubles",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array();tbl_troubles=new Array(\"16\");",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "no space before = is rejected in tbl_alarmes",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes= new Array(\"1\");tbl_troubles = new Array();",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "no space before = is rejected in tbl_troubles",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array();tbl_troubles= new Array(\"16\");",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "no space after = is rejected in tbl_alarmes",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes =new Array(\"1\");tbl_troubles = new Array();",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "no space after = is rejected in tbl_troubles",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array();tbl_troubles =new Array(\"16\");",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a tab around = is rejected in tbl_alarmes",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes\t=\tnew Array(\"1\");tbl_troubles = new Array();",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a tab around = is rejected in tbl_troubles",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array();tbl_troubles\t=\tnew Array(\"16\");",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a table name in upper case is rejected in tbl_alarmes",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);TBL_ALARMES = new Array(\"1\");tbl_troubles = new Array();\ntop.updatedata_al(tbl_alarmes,hebrew);",
+      "expected": { "error": "Regex didn't match the value" },
+      "note": "The lower-case name is still on the page, in the updatedata call the captured pages carry, so the table is expected."
+    },
+    {
+      "name": "a table name in upper case is rejected in tbl_troubles",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array();TBL_TROUBLES = new Array(\"16\");\ntop.updatedata_tr(tbl_troubles);",
+      "expected": { "error": "Regex didn't match the value" },
+      "note": "The lower-case name is still on the page, in the updatedata call the captured pages carry, so the table is expected."
+    },
+    {
+      "name": "a space inside the parentheses is rejected in tbl_alarmes",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array( \"1\" );tbl_troubles = new Array();",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a space inside the parentheses is rejected in tbl_troubles",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array();tbl_troubles = new Array( \"16\" );",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a space before the opening parenthesis is rejected in tbl_alarmes",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array (\"1\");tbl_troubles = new Array();",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a space before the opening parenthesis is rejected in tbl_troubles",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array();tbl_troubles = new Array (\"16\");",
+      "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "a non-ASCII digit is rejected in tbl_alarmes",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array(\"\u0663\");tbl_troubles = new Array();",
+      "expected": { "error": "Regex didn't match the value" },
+      "note": "JavaScript \\d matches only the ASCII digits 0-9; Python str patterns also match other Unicode digits unless re.ASCII is set."
+    },
+    {
+      "name": "a non-ASCII digit is rejected in tbl_troubles",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array();tbl_troubles = new Array(\"\u0663\");",
+      "expected": { "error": "Regex didn't match the value" },
+      "note": "JavaScript \\d matches only the ASCII digits 0-9; Python str patterns also match other Unicode digits unless re.ASCII is set."
+    },
+    {
+      "name": "tbl_alarmes named only in the updatedata_al call, without an assignment, is an error",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_troubles = new Array();\ntop.updatedata_al(tbl_alarmes,hebrew);",
+      "expected": { "error": "Regex didn't match the value" },
+      "note": "Any mention of the table name means the table is expected; only a page without it reads as no alarms."
+    },
+    {
+      "name": "tbl_troubles named only in the updatedata_tr call, without an assignment, is an error",
+      "page": "tbl_statuszone = new Array(1,2);var stayd=\"0\";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array();\ntop.updatedata_tr(tbl_troubles);",
+      "expected": { "error": "Regex didn't match the value" },
+      "note": "Any mention of the table name means the table is expected; only a page without it reads as no troubles."
     },
     {
       "name": "useraccess table missing is an error",

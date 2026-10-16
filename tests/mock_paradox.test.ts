@@ -58,6 +58,17 @@ describe('FakePanel', () => {
     expect(panel.useraccess).toEqual([DISARMED, 0]);
   });
 
+  it('renders the alarm and trouble tables with quoted entries, empty until set', async () => {
+    const panel = await new FakePanel().start();
+
+    const before = await (await get(panel, '/statuslive.html')).text();
+    expect(before).toContain('tbl_alarmes = new Array();tbl_troubles = new Array();');
+
+    panel.setStatus({ alarms: ['1'], troubles: ['16', '38'] });
+    const after = await (await get(panel, '/statuslive.html')).text();
+    expect(after).toContain('tbl_alarmes = new Array("1");tbl_troubles = new Array("16","38");');
+  });
+
   it('answers the login page for data pages while logged out when requireLogin is set', async () => {
     const panel = await new FakePanel({ requireLogin: true }).start();
 

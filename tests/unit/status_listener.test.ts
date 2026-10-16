@@ -59,14 +59,15 @@ describe('statusListener()', () => {
 
   it('logs which status tables changed, with their old and new values', async () => {
     const { panel, tick, logs } = await startListener(ZONES);
-    panel.setStatus({ statuszone: [1, 0], useraccess: [1, 0] });
+    panel.setStatus({ statuszone: [1, 0], useraccess: [1, 0], alarms: ['1'], troubles: ['16', '38'] });
 
     await tick();
 
     expect(logs.log).toEqual([
       ['statuszone changed'], [''], ['1,0'],
       ['useraccess changed'], [''], ['1,0'],
-      ['alarms changed'], [''], ['0'],
+      ['alarms changed'], [''], ['1'],
+      ['troubles changed'], [''], ['16,38'],
     ]);
 
     logs.log.length = 0;

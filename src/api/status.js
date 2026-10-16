@@ -8,7 +8,10 @@ const { getJsValue } = require('../util');
 
 const STATUSZONE_VALUE_RE = /tbl_statuszone[ ]+=[ ]+(new Array\((?:\d,?)*\))/m;
 const USERACCESS_VALUE_RE = /tbl_useraccess[ ]+=[ ]+(new Array\((?:\d,?)*\))/m;
-const ALARMS_VALUE_RE = /tbl_alarmes[ ]+=[ ]+(new Array\((?:"\d",?)*\))/m;
+// The comma between entries is required: with every separator optional, a long run of digits that then fails to
+// match is retried in every way it can be split, which takes minutes and blocks the poll.
+const ALARMS_VALUE_RE = /tbl_alarmes[ ]+=[ ]+(new Array\((?:(?:"\d+"|\d+)(?:,(?:"\d+"|\d+))*,?)?\))/m;
+const TROUBLES_VALUE_RE = /tbl_troubles[ ]+=[ ]+(new Array\((?:(?:"\d+"|\d+)(?:,(?:"\d+"|\d+))*,?)?\))/m;
 // Without a session the panel answers with its login page and HTTP 200.
 const LOGIN_PAGE_RE = /loginaff\(/;
 
@@ -33,23 +36,37 @@ async function sendKeepAlive() {
   if (LOGIN_PAGE_RE.test(response.data)) throw new Error('Keep-alive answered with the login page');
 }
 
+/**
+ * Entries are 0-based indexes, per the panel's commun.js: areas in alarm index tbl_areanam and active troubles index
+ * tbl_troublename, both on index.html. Every captured page has both tables; a page without one reads as empty.
+ * @param {string} statusPage
+ * @param {string} tableName
+ * @param {RegExp} regexp
+ * @returns {number[]}
+ */
+function getIndexList(statusPage, tableName, regexp) {
+  if (!statusPage.includes(tableName)) return [];
+  return getJsValue(statusPage, regexp).map(Number);
+}
+
 async function getParadoxStatus() {
   const statusPage = await getStatusPage();
 
   return [
     getJsValue(statusPage, STATUSZONE_VALUE_RE),
     getJsValue(statusPage, USERACCESS_VALUE_RE),
-    // getJsValue(statusPage, ALARMS_VALUE_RE),
-    [0]
+    getIndexList(statusPage, 'tbl_alarmes', ALARMS_VALUE_RE),
+    getIndexList(statusPage, 'tbl_troubles', TROUBLES_VALUE_RE),
   ];
 }
 
 async function getStatus() {
-  const [statuszone, useraccess, alarms] = await getParadoxStatus();
+  const [statuszone, useraccess, alarms, troubles] = await getParadoxStatus();
   return {
     statuszone,
     useraccess,
     alarms,
+    troubles,
   };
 }
 
