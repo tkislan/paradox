@@ -49,7 +49,7 @@ const Returned = z.union([z.string(), z.number(), z.null()]);
 
 const util = {
   deepArrayEqual: z.array(z.strictObject({ ...row, a: z.array(z.json()).nullable(), b: z.array(z.json()).nullable(), expected: z.boolean() })),
-  getJsValue: z.array(z.strictObject({ ...row, content: Text, pattern: z.string(), expected: z.json(), js_only: z.boolean().optional() })),
+  getJsValue: z.array(z.strictObject({ ...row, content: Text, pattern: z.string(), expected: z.json() })),
   iterateTuples: z.array(z.strictObject({ ...row, list: TupleList, expected: z.array(Zone) })),
 };
 
@@ -57,6 +57,7 @@ export const UtilSpec = z.strictObject({
   ...comment,
   ...util,
   getJsValue_errors: z.array(z.strictObject({ ...row, content: Text, pattern: z.string(), error: z.string() })),
+  getJsValue_not_json: z.array(z.strictObject({ ...row, content: Text, pattern: z.string() })),
   iterateTuples_errors: z.array(z.strictObject({ ...row, list: TupleList, error: z.string() })),
   retry: z.array(z.strictObject({
     ...row,
@@ -68,12 +69,9 @@ export const UtilSpec = z.strictObject({
   objectEntries: z.array(z.strictObject({ ...row, object: z.record(z.string(), z.json()), expected: z.array(z.tuple([z.string(), z.json()])) })),
 });
 
-export const KnownBugUtilSpec = z.strictObject({ ...comment, ...util });
+export const KnownBugUtilSpec = z.strictObject({ ...comment, deepArrayEqual: util.deepArrayEqual });
 
 // status_pages.json
-
-/** A parsed status table: its values, or how many empty slots `new Array(n)` made. */
-const Slots = z.union([z.array(z.number()), z.strictObject({ empty_slots: z.number() })]);
 
 export const StatusPagesSpec = z.strictObject({
   ...comment,
@@ -81,7 +79,7 @@ export const StatusPagesSpec = z.strictObject({
     ...row,
     page: Text,
     expected: z.union([
-      z.strictObject({ statuszone: Slots, useraccess: Slots, alarms: z.array(z.number()) }),
+      z.strictObject({ statuszone: z.array(z.number()), useraccess: z.array(z.number()), alarms: z.array(z.number()) }),
       z.strictObject({ error: z.string() }),
     ]),
   })),

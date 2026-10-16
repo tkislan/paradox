@@ -3,19 +3,28 @@ import { rejection } from '../helpers/outcomes.ts';
 import { html } from '../helpers/responses.ts';
 import { specText, withTitle } from '../support.ts';
 import {
-  OPERATIONS, expectKeepAliveOutcome, expectParsedStatus, expectRequestAsSent, httpFailureRows, plain, plainStatus,
-  requestRows, spec, startBridge,
+  OPERATIONS, expectKeepAliveOutcome, expectParsedStatus, expectRequestAsSent, httpFailureRows, requestRows, spec,
+  startBridge,
 } from '../helpers/status.ts';
 
 describe('getStatus() page parsing', () => {
   it.each(withTitle(spec.get_status))('$title', expectParsedStatus);
+
+  it('rejects values with a leading zero with a SyntaxError instead of reading them as octal', async () => {
+    const { panel, getStatus } = await startBridge();
+    panel.respondWith('/statuslive.html', html('tbl_statuszone = new Array(010,011);var stayd="0";tbl_useraccess = new Array(1,0);'));
+
+    const error = await rejection(getStatus());
+
+    expect(error.name).toBe('SyntaxError');
+  });
 });
 
 describe('getStatus() against the fake panel', () => {
   it('returns the panel state as served', async () => {
     const { panel, getStatus } = await startBridge({ statuszone: [1, 0, 5, ...new Array(29).fill(0)], useraccess: [2, 0] });
 
-    expect(plainStatus(await getStatus())).toEqual({
+    expect(await getStatus()).toEqual({
       statuszone: [1, 0, 5, ...new Array(29).fill(0)],
       useraccess: [2, 0],
       alarms: [0],
@@ -26,9 +35,9 @@ describe('getStatus() against the fake panel', () => {
   it('reads the panel afresh on every call', async () => {
     const { panel, getStatus } = await startBridge({ useraccess: [1, 0] });
 
-    const before = plainStatus(await getStatus());
+    const before = await getStatus();
     panel.setStatus({ useraccess: [2, 0], statuszone: [0, 1, ...new Array(30).fill(0)] });
-    const after = plainStatus(await getStatus());
+    const after = await getStatus();
 
     expect(before.useraccess).toEqual([1, 0]);
     expect(after).toEqual({ statuszone: [0, 1, ...new Array(30).fill(0)], useraccess: [2, 0], alarms: [0] });
@@ -40,7 +49,7 @@ describe('getStatus() against the fake panel', () => {
     const results = await Promise.all([getStatus(), getStatus(), getStatus()]);
 
     expect(panel.requestsTo('/statuslive.html')).toHaveLength(3);
-    expect(results.map((result) => plain(result.useraccess))).toEqual([[2, 0], [2, 0], [2, 0]]);
+    expect(results.map((result) => result.useraccess)).toEqual([[2, 0], [2, 0], [2, 0]]);
   });
 
   it.each(httpFailureRows)('$name, even when the page is valid', async ({ response, expected }) => {
@@ -57,7 +66,7 @@ describe('getStatus() against the fake panel', () => {
     const filler = `<!-- ${'x'.repeat(1024 * 1024)} -->`;
     panel.respondWith('/statuslive.html', html(`${filler}tbl_statuszone = new Array(1,2);tbl_useraccess = new Array(2,0);`));
 
-    expect(plainStatus(await getStatus())).toEqual({ statuszone: [1, 2], useraccess: [2, 0], alarms: [0] });
+    expect(await getStatus()).toEqual({ statuszone: [1, 2], useraccess: [2, 0], alarms: [0] });
   });
 });
 

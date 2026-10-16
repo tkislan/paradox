@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { deepArrayEqual, getJsValue, retry } from '../../src/util.js';
+import { deepArrayEqual, retry } from '../../src/util.js';
 import { cases, loadKnownBugSpec, useFakeClock, waitFor } from '../support.ts';
-import { expectDeepArrayEqual, expectJsValue, expectTuples } from '../helpers/util.ts';
+import { expectDeepArrayEqual } from '../helpers/util.ts';
 import { KnownBugUtilSpec } from '../spec/schemas.ts';
 
 const spec = loadKnownBugSpec('util', KnownBugUtilSpec);
@@ -22,24 +22,6 @@ describe('deepArrayEqual', () => {
     expect(deepArrayEqual(withNaN, withNaN)).toBe(false);
     expect(deepArrayEqual([NaN], [NaN])).toBe(false);
   });
-});
-
-describe('getJsValue', () => {
-  it.each(cases(spec.getJsValue))('%s', (_title, row) => expectJsValue(row));
-
-  it('KNOWN BUG KB-23: `new Array(7)` is seven empty slots, not [7]', () => {
-
-    const value = getJsValue('x=new Array(7)', /x=(.*)/);
-
-    expect(value).toHaveLength(7);
-    expect(Object.keys(value)).toEqual([]);
-    expect(getJsValue('x=new Array("7")', /x=(.*)/)).toEqual(['7']);
-    expect(getJsValue('x=new Array(7,8)', /x=(.*)/)).toEqual([7, 8]);
-  });
-});
-
-describe('iterateTuples', () => {
-  it.each(cases(spec.iterateTuples))('%s', (_title, row) => expectTuples(row));
 });
 
 describe('retry', () => {

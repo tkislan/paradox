@@ -28,6 +28,14 @@
       "name": "index page failures are retried and startup still succeeds",
       "panel": {"faults": [{"path": "/index.html", "kind": "http_500", "times": 3}]},
       "start": {"expect": {"panel_requests": ["GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html", "GET /index.html", "GET /index.html", "GET /index.html"]}}
+    },
+    {
+      "name": "a zone name with a hyphen starts the bridge and the zone is monitored",
+      "panel": {"zones": [[1, "Hall-way"]], "statuszone": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]},
+      "start": {"expect": {"panel_requests": ["GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html"]}},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}, {"topic": "paradox/sensor/0", "payload": "ON"}]}}
+      ]
     }
   ],
   "keep_alive": [
@@ -89,6 +97,14 @@
         {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}},
         {"advance_ms": 1000, "panel_status": {"useraccess": [2, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "ON"}]}}
       ]
+    },
+    {
+      "name": "a useraccess table with a single entry is read as that entry",
+      "panel": {"useraccess": [2]},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "ON"}]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [2, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"]}}
+      ]
     }
   ],
   "sensors": [
@@ -143,11 +159,28 @@
       ]
     },
     {
+      "name": "a status table with a single entry is read as that entry",
+      "panel": {"statuszone": [1]},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}, {"topic": "paradox/sensor/0", "payload": "ON"}]}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [1, 1]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/sensor/1", "payload": "ON"}]}}
+      ]
+    },
+    {
       "name": "with no enabled zone no sensor is ever published",
       "panel": {"zones": []},
       "steps": [
         {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}},
         {"advance_ms": 1000, "panel_status": {"statuszone": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}, "expect": {"panel_requests": ["GET /statuslive.html"]}}
+      ]
+    },
+    {
+      "name": "with 32 enabled zones, zones past the 16th are published too",
+      "panel": {"zones": [[1, "Zone 1"], [1, "Zone 2"], [1, "Zone 3"], [1, "Zone 4"], [1, "Zone 5"], [1, "Zone 6"], [1, "Zone 7"], [1, "Zone 8"], [1, "Zone 9"], [1, "Zone 10"], [1, "Zone 11"], [1, "Zone 12"], [1, "Zone 13"], [1, "Zone 14"], [1, "Zone 15"], [1, "Zone 16"], [1, "Zone 17"], [1, "Zone 18"], [1, "Zone 19"], [1, "Zone 20"], [1, "Zone 21"], [1, "Zone 22"], [1, "Zone 23"], [1, "Zone 24"], [1, "Zone 25"], [1, "Zone 26"], [1, "Zone 27"], [1, "Zone 28"], [1, "Zone 29"], [1, "Zone 30"], [1, "Zone 31"], [1, "Zone 32"]]},
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/sensor/0", "payload": "ON"}, {"topic": "paradox/sensor/15", "payload": "ON"}, {"topic": "paradox/sensor/16", "payload": "ON"}, {"topic": "paradox/sensor/31", "payload": "ON"}]}},
+        {"advance_ms": 1000, "panel_status": {"statuszone": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]}, "expect": {"mqtt_published": [{"topic": "paradox/sensor/0", "payload": "OFF"}, {"topic": "paradox/sensor/15", "payload": "OFF"}], "panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}}
       ]
     }
   ],

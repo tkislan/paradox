@@ -9,7 +9,7 @@ const { sleep, getJsValue, iterateTuples, retry } = require('../util');
 
 const LOGIN_SESSION_VALUE_RE = /loginaff\("([\w]+)"/m;
 const PAGE_TITLE_RE = /<head>.*<title>(.*)<\/title>.*<\/head>/m;
-const ZONES_VALUE_RE = /tbl_zone[ ]+=[ ]+(new Array\((?:\d,"[\w ]+",?)*\))/m;
+const ZONES_VALUE_RE = /tbl_zone[ ]+=[ ]+(new Array\((?:\d+,"(?:[^"\\]|\\.)*",?)*\))/m;
 
 const MAX_INDEX_PAGE_RETRY = 10;
 const INDEX_PAGE_RETRY_WAIT_TIME = 1000; // in milliseconds

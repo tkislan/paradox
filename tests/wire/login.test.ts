@@ -80,6 +80,28 @@ describe('login()', () => {
     expectRequestCounts(panel, Object.fromEntries(FLOW_PATHS.map((p) => [p, 2])));
   });
 
+  it('fails with a SyntaxError when entries of the zone list have no comma between them', async () => {
+    const { login } = await startBridge({
+      responses: { '/index.html': { body: '<html><script>tbl_zone = new Array(1,"A"1,"B");</script></html>' } },
+    });
+
+    const outcome = await outcomeOf(login());
+
+    expect(outcome.error?.name).toBe('SyntaxError');
+  });
+
+  it('a zone with a two-digit flag does not make login fail', async () => {
+    const { login } = await startBridge({
+      responses: { '/index.html': { body: '<html><script>tbl_zone = new Array(16,"Area five",1,"One");</script></html>' } },
+    });
+
+    const outcome = await outcomeOf(login());
+
+    expect(outcome.error).toBeUndefined();
+    // Whether the flag-16 zone is kept as well is KB-18, so only the area-1 zone is asserted.
+    expect(outcome.value.zoneTuples).toContainEqual([1, 'One']);
+  });
+
   it('rejects with the connection error when the panel is down, after a warning for the logout', async () => {
     const { panel, output, login } = await startBridge();
     await panel.stop();

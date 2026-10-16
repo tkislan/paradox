@@ -1,7 +1,5 @@
 'use strict';
 
-const vm = require('vm');
-
 /**
  * @param {number} ms
  * @returns {Promise<void>}
@@ -37,8 +35,10 @@ function getJsValue(content, regexp) {
     throw new Error('Regex didn\'t match the value');
   }
 
-  const sandbox = Object.create(null);
-  return vm.runInNewContext(match[1], sandbox);
+  if (!match[1]) return undefined;
+  // The page comes off the network, so it is parsed as data, never run. JSON has no `new Array(...)` and,
+  // unlike JavaScript, rejects a trailing comma.
+  return JSON.parse(match[1].replace(/^new Array\(([\s\S]*?),?\)$/, '[$1]'));
 }
 
 /**
@@ -48,9 +48,7 @@ function getJsValue(content, regexp) {
 function* iterateTuples(list) {
   if (list.length % 2 !== 0) throw new Error('Invalid list length, should be divisible by tuple size');
 
-  const tupleCount = list.length / 2;
-
-  for (let i = 0; i < tupleCount; i += 2) {
+  for (let i = 0; i < list.length; i += 2) {
     /** @type {[number, string]} */
     const tuple = [0, ''];
     for (let j = 0; j < 2; j += 1) {

@@ -15,7 +15,7 @@ describe('getStatus() page parsing', () => {
   it.each([
     ['the login page', specText({ file: 'data/login_page.html' }), 'tbl_statuszone'],
     ['a page with only the zone table', 'tbl_statuszone = new Array(1,2);', 'tbl_useraccess'],
-  ])('KNOWN BUG KB-36: a failed parse logs the whole page, then the pattern that did not match (%s)', async (_, page, failedTable) => {
+  ])('KNOWN BUG KB-36: a table the pattern does not find logs the whole page, then the pattern (%s)', async (_, page, failedTable) => {
     const { panel, logs, getStatus } = await startBridge();
     panel.respondWith('/statuslive.html', html(page));
 

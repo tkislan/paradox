@@ -7,7 +7,6 @@ export function expectDeepArrayEqual({ a, b, expected }) {
 }
 
 export function expectJsValue({ content, pattern, expected }) {
-  // toEqual, not toStrictEqual: the array is built in the vm's own realm.
   expect(getJsValue(specText(content), new RegExp(pattern))).toEqual(expected);
 }
 

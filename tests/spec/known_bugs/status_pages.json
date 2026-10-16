@@ -2,47 +2,6 @@
   "_comment": "Rows of ../status_pages.json that pin a defect of the current code on purpose (known_bug: the catalog id in tests/README.md), moved here unchanged: the same groups and the same row format, which the comment of that file describes. A port does not have to reproduce any of them.",
   "get_status": [
     {
-      "name": "a single-value zone table becomes that many empty slots",
-      "page": "tbl_statuszone = new Array(7);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
-      "expected": {
-        "statuszone": { "empty_slots": 7 },
-        "useraccess": [1, 0],
-        "alarms": [0]
-      },
-      "known_bug": "KB-23",
-      "note": "The value is eval-ed as new Array(7), the JavaScript length constructor, not as a one-element list."
-    },
-    {
-      "name": "a single-value useraccess table becomes that many empty slots",
-      "page": "tbl_statuszone = new Array(0,0);var stayd=\"0\";tbl_useraccess = new Array(2);",
-      "expected": {
-        "statuszone": [0, 0],
-        "useraccess": { "empty_slots": 2 },
-        "alarms": [0]
-      },
-      "known_bug": "KB-23",
-      "note": "A panel with a one-entry useraccess table would therefore read as \"armed state unknown\"."
-    },
-    {
-      "name": "a single zero value becomes an empty list",
-      "page": "tbl_statuszone = new Array(0);var stayd=\"0\";tbl_useraccess = new Array(0);",
-      "expected": { "statuszone": [], "useraccess": [], "alarms": [0] },
-      "known_bug": "KB-23"
-    },
-    {
-      "name": "a single value of 2^32 or more fails with the engine error instead of the regex error",
-      "page": "tbl_statuszone = new Array(4294967296);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
-      "expected": { "error": "Invalid array length" },
-      "known_bug": "KB-23"
-    },
-    {
-      "name": "values with a leading zero are read as octal",
-      "page": "tbl_statuszone = new Array(010,011);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
-      "expected": { "statuszone": [8, 9], "useraccess": [1, 0], "alarms": [0] },
-      "known_bug": "KB-39",
-      "note": "The value is eval-ed as JavaScript source, where 010 is octal 8; a port that parses decimal integers reads 10 and 11. The panel is not known to pad numbers with zeros."
-    },
-    {
       "name": "tbl_alarmes entries are ignored and alarms is always [0]",
       "page": "tbl_statuszone = new Array(1,0);var stayd=\"0\";tbl_useraccess = new Array(2,0);tbl_alarmes = new Array(\"3\",\"4\");tbl_troubles = new Array(\"16\",\"19\");",
       "expected": { "statuszone": [1, 0], "useraccess": [2, 0], "alarms": [0] },

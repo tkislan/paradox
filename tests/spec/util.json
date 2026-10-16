@@ -1,5 +1,5 @@
 {
-  "_comment": "Case tables for src/util.js. Rows that pin a defect on purpose (known_bug) are in known_bugs/util.json, in the same groups; rows with js_only depend on JavaScript semantics a port need not copy. A missing or null array in deepArrayEqual means 'no array' (undefined in JS, None in Python). getJsValue rows: content is a string or {file} relative to tests/; pattern is a regex source (JS and Python agree on every pattern here; flags are never needed). Retry rows: attempts is the script of successive calls, throws raises an error with that message, expected.throws is the message of the error that comes out. Expected values of the captured-page rows were extracted independently with Python's re and json.",
+  "_comment": "Case tables for src/util.js. Rows that pin a defect on purpose (known_bug) are in known_bugs/util.json, in the same groups. A missing or null array in deepArrayEqual means 'no array' (undefined in JS, None in Python). getJsValue rows: content is a string or {file} relative to tests/; pattern is a regex source (JS and Python agree on every pattern here; flags are never needed); capture group 1 is read as JSON, except that a capture that is exactly new Array(...) is read as [...] with one trailing comma dropped. getJsValue_not_json rows are text that is not JSON even so: getJsValue throws a SyntaxError (Python's json.loads raises ValueError), the text is never run. Retry rows: attempts is the script of successive calls, throws raises an error with that message, expected.throws is the message of the error that comes out. Expected values of the captured-page rows were extracted independently with Python's re and json.",
   "deepArrayEqual": [
     {
       "name": "empty arrays are equal",
@@ -187,7 +187,7 @@
     {
       "name": "numbers and strings mixed, as in the zone table",
       "content": "tbl_zone = new Array(1,\"Door\",0,\" \");",
-      "pattern": "tbl_zone[ ]+=[ ]+(new Array\\((?:\\d,\"[\\w ]+\",?)*\\))",
+      "pattern": "tbl_zone[ ]+=[ ]+(new Array\\((?:\\d+,\"(?:[^\"\\\\]|\\\\.)*\",?)*\\))",
       "expected": [1, "Door", 0, " "]
     },
     {
@@ -215,13 +215,37 @@
       "expected": "26"
     },
     {
+      "name": "a single number in new Array(...) is a one-element list",
+      "content": "x=new Array(7)",
+      "pattern": "x=(.*)",
+      "expected": [7]
+    },
+    {
+      "name": "a single string in new Array(...) is a one-element list",
+      "content": "x=new Array(\"7\")",
+      "pattern": "x=(.*)",
+      "expected": ["7"]
+    },
+    {
+      "name": "one trailing comma in new Array(...) is dropped",
+      "content": "x=new Array(1,2,)",
+      "pattern": "x=(.*)",
+      "expected": [1, 2]
+    },
+    {
+      "name": "new Array(...) may span lines",
+      "content": "x=new Array(1,\n2)",
+      "pattern": "x=([\\s\\S]*)",
+      "expected": [1, 2]
+    },
+    {
       "name": "non-ASCII text in strings",
       "content": "tbl_areanam = new Array(\"Časť 1\",\"Časť 2\");",
       "pattern": "tbl_areanam[ ]+=[ ]+(new Array\\([^)]*\\))",
       "expected": ["Časť 1", "Časť 2"]
     },
     {
-      "name": "only capture group 1 is evaluated",
+      "name": "only capture group 1 is parsed",
       "content": "a=[1] b=[2]",
       "pattern": "a=(\\[\\d\\]) b=(\\[\\d\\])",
       "expected": [1]
@@ -235,7 +259,7 @@
     {
       "name": "captured index page: zone table of 32 slots",
       "content": {"file": "data/index_page.html"},
-      "pattern": "tbl_zone[ ]+=[ ]+(new Array\\((?:\\d,\"[\\w ]+\",?)*\\))",
+      "pattern": "tbl_zone[ ]+=[ ]+(new Array\\((?:\\d+,\"(?:[^\"\\\\]|\\\\.)*\",?)*\\))",
       "expected": [
         1, "Predsien", 1, "Lava izba", 1, "Prava izba", 1, "Spalna", 1, "Obyvacka", 1, "Chodba", 0, " ", 0, " ", 0,
         " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ",
@@ -305,8 +329,44 @@
       "name": "a pattern that is stricter than the page (zone name with a hyphen)",
       "content": "tbl_zone = new Array(1,\"Back-door\",0,\" \")",
       "pattern": "tbl_zone[ ]+=[ ]+(new Array\\((?:\\d,\"[\\w ]+\",?)*\\))",
-      "note": "Same failure mode as KB-10, seen from util.",
       "error": "Regex didn't match the value"
+    }
+  ],
+  "getJsValue_not_json": [
+    {
+      "name": "arithmetic is rejected, not computed",
+      "content": "x=1+2",
+      "pattern": "x=(.*)"
+    },
+    {
+      "name": "a bare name is rejected, not looked up",
+      "content": "x=foo",
+      "pattern": "x=(.*)"
+    },
+    {
+      "name": "an unclosed call is rejected",
+      "content": "x=foo(",
+      "pattern": "x=(.*)"
+    },
+    {
+      "name": "an expression that reaches for a host global is rejected, not run",
+      "content": "x=typeof process",
+      "pattern": "x=(.*)"
+    },
+    {
+      "name": "a way out of a JavaScript sandbox is rejected, not run",
+      "content": "x=this.constructor.constructor(\"return typeof process\")()",
+      "pattern": "x=(.*)"
+    },
+    {
+      "name": "an assignment is rejected, not run",
+      "content": "x=leaked=5",
+      "pattern": "x=(.*)"
+    },
+    {
+      "name": "a number with a leading zero is rejected, not read as octal",
+      "content": "x=new Array(010,011)",
+      "pattern": "x=(.*)"
     }
   ],
   "iterateTuples": [
@@ -319,6 +379,125 @@
       "name": "one pair",
       "list": [1, "A"],
       "expected": [[1, "A"]]
+    },
+    {
+      "name": "2 pairs (4 items) yield both",
+      "list": [1, "A", 0, "B"],
+      "expected": [[1, "A"], [0, "B"]]
+    },
+    {
+      "name": "3 pairs (6 items) yield all 3",
+      "list": [1, "A", 0, "B", 1, "C"],
+      "expected": [[1, "A"], [0, "B"], [1, "C"]]
+    },
+    {
+      "name": "4 pairs (8 items) yield all 4",
+      "list": [1, "A", 0, "B", 1, "C", 0, "D"],
+      "expected": [[1, "A"], [0, "B"], [1, "C"], [0, "D"]]
+    },
+    {
+      "name": "5 pairs (10 items) yield all 5",
+      "list": [1, "A", 0, "B", 1, "C", 0, "D", 1, "E"],
+      "expected": [[1, "A"], [0, "B"], [1, "C"], [0, "D"], [1, "E"]]
+    },
+    {
+      "name": "6 pairs (12 items) yield all 6",
+      "list": [1, "A", 0, "B", 1, "C", 0, "D", 1, "E", 0, "F"],
+      "expected": [[1, "A"], [0, "B"], [1, "C"], [0, "D"], [1, "E"], [0, "F"]]
+    },
+    {
+      "name": "7 pairs (14 items) yield all 7",
+      "list": [1, "A", 0, "B", 1, "C", 0, "D", 1, "E", 0, "F", 1, "G"],
+      "expected": [[1, "A"], [0, "B"], [1, "C"], [0, "D"], [1, "E"], [0, "F"], [1, "G"]]
+    },
+    {
+      "name": "8 pairs (16 items) yield all 8",
+      "list": [1, "A", 0, "B", 1, "C", 0, "D", 1, "E", 0, "F", 1, "G", 0, "H"],
+      "expected": [[1, "A"], [0, "B"], [1, "C"], [0, "D"], [1, "E"], [0, "F"], [1, "G"], [0, "H"]]
+    },
+    {
+      "name": "32 enabled zones yield all 32 pairs, in order",
+      "list": [
+        1, "Z1", 1, "Z2", 1, "Z3", 1, "Z4", 1, "Z5", 1, "Z6", 1, "Z7", 1, "Z8", 1, "Z9", 1, "Z10", 1, "Z11", 1,
+        "Z12", 1, "Z13", 1, "Z14", 1, "Z15", 1, "Z16", 1, "Z17", 1, "Z18", 1, "Z19", 1, "Z20", 1, "Z21", 1, "Z22", 1,
+        "Z23", 1, "Z24", 1, "Z25", 1, "Z26", 1, "Z27", 1, "Z28", 1, "Z29", 1, "Z30", 1, "Z31", 1, "Z32"
+      ],
+      "expected": [
+        [1, "Z1"],
+        [1, "Z2"],
+        [1, "Z3"],
+        [1, "Z4"],
+        [1, "Z5"],
+        [1, "Z6"],
+        [1, "Z7"],
+        [1, "Z8"],
+        [1, "Z9"],
+        [1, "Z10"],
+        [1, "Z11"],
+        [1, "Z12"],
+        [1, "Z13"],
+        [1, "Z14"],
+        [1, "Z15"],
+        [1, "Z16"],
+        [1, "Z17"],
+        [1, "Z18"],
+        [1, "Z19"],
+        [1, "Z20"],
+        [1, "Z21"],
+        [1, "Z22"],
+        [1, "Z23"],
+        [1, "Z24"],
+        [1, "Z25"],
+        [1, "Z26"],
+        [1, "Z27"],
+        [1, "Z28"],
+        [1, "Z29"],
+        [1, "Z30"],
+        [1, "Z31"],
+        [1, "Z32"]
+      ]
+    },
+    {
+      "name": "captured index page: 32 zone slots yield 32 pairs, the six enabled zones first",
+      "list": [
+        1, "Predsien", 1, "Lava izba", 1, "Prava izba", 1, "Spalna", 1, "Obyvacka", 1, "Chodba", 0, " ", 0, " ", 0,
+        " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ",
+        0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " ", 0, " "
+      ],
+      "expected": [
+        [1, "Predsien"],
+        [1, "Lava izba"],
+        [1, "Prava izba"],
+        [1, "Spalna"],
+        [1, "Obyvacka"],
+        [1, "Chodba"],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "],
+        [0, " "]
+      ]
     }
   ],
   "iterateTuples_errors": [

@@ -39,9 +39,105 @@
       "expected": { "zoneTuples": [[1, "A"]] }
     },
     {
+      "name": "a list of two zones yields both",
+      "panel": { "/index.html": { "body": "<html><script>tbl_zone = new Array(1,\"A\",1,\"B\");</script></html>" } },
+      "expected": { "zoneTuples": [[1, "A"], [1, "B"]] }
+    },
+    {
+      "name": "a list of three zones yields all three",
+      "panel": { "/index.html": { "body": "<html><script>tbl_zone = new Array(1,\"A\",1,\"B\",1,\"C\");</script></html>" } },
+      "expected": { "zoneTuples": [[1, "A"], [1, "B"], [1, "C"]] }
+    },
+    {
+      "name": "a list of four zones yields all four",
+      "panel": { "/index.html": { "body": "<html><script>tbl_zone = new Array(1,\"A\",1,\"B\",1,\"C\",1,\"D\");</script></html>" } },
+      "expected": { "zoneTuples": [[1, "A"], [1, "B"], [1, "C"], [1, "D"]] }
+    },
+    {
+      "name": "32 enabled zones yield all 32",
+      "panel": {
+        "/index.html": {
+          "zones": [
+            [1, "z01"], [1, "z02"], [1, "z03"], [1, "z04"], [1, "z05"], [1, "z06"], [1, "z07"], [1, "z08"],
+            [1, "z09"], [1, "z10"], [1, "z11"], [1, "z12"], [1, "z13"], [1, "z14"], [1, "z15"], [1, "z16"],
+            [1, "z17"], [1, "z18"], [1, "z19"], [1, "z20"], [1, "z21"], [1, "z22"], [1, "z23"], [1, "z24"],
+            [1, "z25"], [1, "z26"], [1, "z27"], [1, "z28"], [1, "z29"], [1, "z30"], [1, "z31"], [1, "z32"]
+          ]
+        }
+      },
+      "expected": {
+        "zoneTuples": [
+          [1, "z01"], [1, "z02"], [1, "z03"], [1, "z04"], [1, "z05"], [1, "z06"], [1, "z07"], [1, "z08"],
+          [1, "z09"], [1, "z10"], [1, "z11"], [1, "z12"], [1, "z13"], [1, "z14"], [1, "z15"], [1, "z16"],
+          [1, "z17"], [1, "z18"], [1, "z19"], [1, "z20"], [1, "z21"], [1, "z22"], [1, "z23"], [1, "z24"],
+          [1, "z25"], [1, "z26"], [1, "z27"], [1, "z28"], [1, "z29"], [1, "z30"], [1, "z31"], [1, "z32"]
+        ]
+      }
+    },
+    {
+      "name": "an enabled zone in slot 15 (the 16th) is seen",
+      "panel": { "/index.html": { "zones_by_slot": { "15": [1, "Sixteenth"] } } },
+      "expected": { "zoneTuples": [[1, "Sixteenth"]] }
+    },
+    {
+      "name": "an enabled zone in slot 16 (the 17th) is seen",
+      "panel": { "/index.html": { "zones_by_slot": { "14": [1, "Fifteenth"], "16": [1, "Seventeenth"] } } },
+      "expected": { "zoneTuples": [[1, "Fifteenth"], [1, "Seventeenth"]] }
+    },
+    {
       "name": "zone names of letters, digits, underscore and spaces are accepted",
       "panel": { "/index.html": { "zones": [[1, "Door_1"], [1, "Room 2"], [1, "UPPER lower 09"]] } },
       "expected": { "zoneTuples": [[1, "Door_1"], [1, "Room 2"], [1, "UPPER lower 09"]] }
+    },
+    {
+      "name": "an accented zone name is accepted",
+      "panel": { "/index.html": { "zones": [[1, "Obývačka"]] } },
+      "expected": { "zoneTuples": [[1, "Obývačka"]] }
+    },
+    {
+      "name": "an accented name on a disabled slot is dropped like any disabled slot",
+      "panel": { "/index.html": { "zones": [[1, "Door"], [0, "Pivnica č. 2"]] } },
+      "expected": { "zoneTuples": [[1, "Door"]] }
+    },
+    {
+      "name": "a hyphen in a zone name is accepted",
+      "panel": { "/index.html": { "zones": [[1, "Pred-sien"]] } },
+      "expected": { "zoneTuples": [[1, "Pred-sien"]] }
+    },
+    {
+      "name": "an apostrophe in a zone name is accepted",
+      "panel": { "/index.html": { "zones": [[1, "Peter's room"]] } },
+      "expected": { "zoneTuples": [[1, "Peter's room"]] }
+    },
+    {
+      "name": "a dot in a zone name is accepted",
+      "panel": { "/index.html": { "zones": [[1, "1.floor"]] } },
+      "expected": { "zoneTuples": [[1, "1.floor"]] }
+    },
+    {
+      "name": "a comma in a zone name stays part of the name",
+      "panel": { "/index.html": { "zones": [[1, "A,B"]] } },
+      "expected": { "zoneTuples": [[1, "A,B"]] }
+    },
+    {
+      "name": "parentheses in a zone name stay part of the name",
+      "panel": { "/index.html": { "zones": [[1, "Hall (old)"], [1, "Door"]] } },
+      "expected": { "zoneTuples": [[1, "Hall (old)"], [1, "Door"]] }
+    },
+    {
+      "name": "a double quote escaped with a backslash is part of the zone name",
+      "panel": { "/index.html": { "body": "<html><script>tbl_zone = new Array(1,\"Say \\\"hi\\\"\",1,\"Door\");</script></html>" } },
+      "expected": { "zoneTuples": [[1, "Say \"hi\""], [1, "Door"]] }
+    },
+    {
+      "name": "an empty name on an enabled zone is accepted",
+      "panel": { "/index.html": { "zones": [[1, ""]] } },
+      "expected": { "zoneTuples": [[1, ""]] }
+    },
+    {
+      "name": "an empty name on a disabled slot is dropped like any disabled slot",
+      "panel": { "/index.html": { "zones": [[1, "Door"], [0, ""]] } },
+      "expected": { "zoneTuples": [[1, "Door"]] }
     },
     {
       "name": "an index page without tbl_zone makes login fail",

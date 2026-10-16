@@ -1,5 +1,5 @@
 {
-  "_comment": "Pages and responses the Paradox panel gives to the bridge, and what src/api/status.js and src/api/alarm.js make of them. \"page\" / \"response.body\" is an inline string or {\"file\": \"<path relative to tests/>\"}. Result arrays: {\"empty_slots\": n} stands for a JavaScript new Array(n), n unset slots (a port may use a list of None). \"error\" is the exact message of the failure; messages other than the parse error come from the JavaScript HTTP client (axios 0.18) and only the fact of failing is portable. Rows with a known_bug (catalog in README.md) are in known_bugs/status_pages.json, in the same groups.",
+  "_comment": "Pages and responses the Paradox panel gives to the bridge, and what src/api/status.js and src/api/alarm.js make of them. \"page\" / \"response.body\" is an inline string or {\"file\": \"<path relative to tests/>\"}. \"error\" is the exact message of the failure; messages other than the parse error come from the JavaScript HTTP client (axios 0.18) and only the fact of failing is portable. Rows with a known_bug (catalog in README.md) are in known_bugs/status_pages.json, in the same groups.",
   "get_status": [
     {
       "name": "armed panel capture",
@@ -29,6 +29,26 @@
       "name": "values of two or more digits are kept whole",
       "page": "tbl_statuszone = new Array(10,25,3,255);var stayd=\"0\";tbl_useraccess = new Array(12,0);",
       "expected": { "statuszone": [10, 25, 3, 255], "useraccess": [12, 0], "alarms": [0] }
+    },
+    {
+      "name": "a single-value zone table is a list of that one value",
+      "page": "tbl_statuszone = new Array(7);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
+      "expected": { "statuszone": [7], "useraccess": [1, 0], "alarms": [0] }
+    },
+    {
+      "name": "a single-value useraccess table is a list of that one value",
+      "page": "tbl_statuszone = new Array(0,0);var stayd=\"0\";tbl_useraccess = new Array(2);",
+      "expected": { "statuszone": [0, 0], "useraccess": [2], "alarms": [0] }
+    },
+    {
+      "name": "a single zero value is a list of one zero",
+      "page": "tbl_statuszone = new Array(0);var stayd=\"0\";tbl_useraccess = new Array(0);",
+      "expected": { "statuszone": [0], "useraccess": [0], "alarms": [0] }
+    },
+    {
+      "name": "a single value of 2^32 is read as that number",
+      "page": "tbl_statuszone = new Array(4294967296);var stayd=\"0\";tbl_useraccess = new Array(1,0);",
+      "expected": { "statuszone": [4294967296], "useraccess": [1, 0], "alarms": [0] }
     },
     {
       "name": "32 zones are all returned",

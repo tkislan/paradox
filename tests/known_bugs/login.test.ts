@@ -22,7 +22,7 @@ describe('login()', () => {
 
   it('KNOWN BUG KB-3: a login that fails after the credentials were accepted leaves the panel session open', async () => {
     const { panel, login } = await startBridge({
-      responses: { '/index.html': { zones: [[1, 'Obývačka']] } },
+      responses: { '/index.html': { body: '<html><head></head><body>nothing here</body></html>' } },
     });
 
     const outcome = await outcomeOf(login());
@@ -30,16 +30,6 @@ describe('login()', () => {
     expect(outcome.error?.message).toBe("Regex didn't match the value");
     expect(panel.loggedIn).toBe(true);
     expect(panel.requestsTo('/logout.html')).toHaveLength(1);
-  });
-
-  it('KNOWN BUG KB-39: entries of the zone list without a comma between them reach the interpreter and fail with its SyntaxError', async () => {
-    const { login } = await startBridge({
-      responses: { '/index.html': { body: '<html><script>tbl_zone = new Array(1,"A"1,"B");</script></html>' } },
-    });
-
-    const outcome = await outcomeOf(login());
-
-    expect(outcome.error?.name).toBe('SyntaxError');
   });
 });
 
