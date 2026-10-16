@@ -131,16 +131,5 @@
         {"mqtt_command": "arm", "expect": {"panel_requests": ["GET /statuslive.html?area=00&value=r"]}}
       ]
     }
-  ],
-  "failures": [
-    {
-      "name": "after a failed poll that a new login did not fix, the bridge exits without logging out",
-      "known_bug": "KB-3",
-      "note": "The poll fails again less than 60000 ms after the new login started, so the bridge gives up; the session that login opened stays open until the panel times it out or the next start logs out.",
-      "steps": [
-        {"panel_fault": {"path": "/statuslive.html", "kind": "http_500", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html", "GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html"]}},
-        {"panel_fault": {"path": "/statuslive.html", "kind": "http_500", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "process_exit": [1]}}
-      ]
-    }
   ]
 }

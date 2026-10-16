@@ -90,8 +90,12 @@ async function run() {
     console.error(error);
     // Polls keep failing until the new session exists.
     if (reloggingIn) return;
-    // Failing again so soon means a new session does not help; exit and leave it to the restart policy.
-    if (Date.now() - lastReloginAt < RELOGIN_MIN_INTERVAL) return process.exit(1);
+    // Failing again so soon means a new session does not help: shut down as on a signal, then leave it to the restart
+    // policy. The shutdown also stops the polls, which would otherwise keep failing into this handler.
+    if (Date.now() - lastReloginAt < RELOGIN_MIN_INTERVAL) {
+      exitHandler().catch(console.error).finally(() => process.exit(1));
+      return;
+    }
     reloggingIn = true;
     lastReloginAt = Date.now();
     login().then(() => { reloggingIn = false; }, (loginError) => {

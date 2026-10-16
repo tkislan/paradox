@@ -279,7 +279,7 @@ export const SystemScenariosSpec = z.strictObject({
   ...scenarioGroups,
 });
 
-export const KnownBugSystemScenariosSpec = z.strictObject({ ...comment, ...scenarioGroups }).omit({ keep_alive: true });
+export const KnownBugSystemScenariosSpec = z.strictObject({ ...comment, ...scenarioGroups }).omit({ keep_alive: true, failures: true });
 
 /** Any spec file, for checks that look at every row whatever its table. */
 export const AnySpec = z.record(z.string(), z.json());

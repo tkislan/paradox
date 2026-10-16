@@ -25,7 +25,7 @@ The tests are TypeScript that vitest runs as is (it strips the types, nothing is
 checks them together with `src/`, with the same settings: `strict`, but unannotated parameters allowed (`any`).
 `tests/package.json` marks them as ES modules, which they are under vitest.
 
-About 650 tests, 10 s. `npx vitest run --exclude 'tests/known_bugs/**'` skips the 39 that pin a defect. In agent/CI
+About 650 tests, 10 s. `npx vitest run --exclude 'tests/known_bugs/**'` skips the 38 that pin a defect. In agent/CI
 environments vitest may pick a reporter that hides console output; use `npx vitest run --reporter=default` to see
 whether a change made the suite noisy (it must stay silent).
 
@@ -41,13 +41,13 @@ versions production installs.
 95.3 % of lines, 96.9 % of branches. Dead code in `src/` is not covered: the `default:` case of the sensor handler
 (`app.js:46`, the value is always a boolean) and `initSensorStatus` (`status_listener.js:48-50`, never called).
 Deliberately without a test, because a Home Assistant integration has nothing like them: the REST API (`app.js`),
-signal handling and shutdown (`signal.js` and the shutdown handler in `app.js`, which stops the timers and closes the
-REST server), the missing-variable check (`config.js`), MQTT connection failures (`mqtt_link.js`) and the
-`playground.js` script. The shutdown handler also logs the panel session out, which an integration does need when it
-is unloaded; that has no test only because the signal and shutdown tests were dropped (see "Porting to Python").
+signal handling (`signal.js`), the missing-variable check (`config.js`), MQTT connection failures (`mqtt_link.js`) and
+the `playground.js` script. The shutdown handler in `app.js`, which a signal calls, is also what the bridge runs before
+it exits when a new login did not help, and the `failures` scenarios test it there: it logs the panel session out, no
+poll or keep-alive follows, and the exit waits for the logout. That it closes the REST server is not checked.
 `config.js`, `mqtt_link.js`, `keep_alive_worker.js` and `signal.js` have no tests of their own; the system tests only
-run them, so they show as covered even where no assertion would notice a changed value. The same goes for the
-shutdown handler, which the system tests' cleanup calls.
+run them, so they show as covered even where no assertion would notice a changed value. For `signal.js` that is the
+system tests' cleanup, which calls the SIGTERM listener the bridge registered.
 
 ## Layout
 
@@ -125,13 +125,15 @@ projects), then the parsing tables (`status_pages`, `login_cases`), then `status
 - Rows with `"known_bug"` (all in `spec/known_bugs/`, skip that directory) carry today's (wrong) result as `expected`;
   they mark decisions, not behavior to copy.
 - Rows with `"js_only"` (one `rc4` vector in `crypto.json`) depend on JavaScript semantics (`NaN`).
-- `panel_requests_ignored` in a scenario step names requests the row takes no side on: the logout before an exit,
-  which KB-3 is about, and the poll of a tick that falls on the same millisecond as a request timeout.
+- `panel_requests_ignored` in a scenario step names requests the row takes no side on: the poll of a tick that falls
+  on the same millisecond as a request timeout.
 - Error strings that come from axios or V8 (`Request failed with status code 500`, `timeout of 10000ms exceeded`,
   `socket hang up`) are not portable; only the fact of failing is, and for a timeout when it fails. The bridge's own
   messages (`Login failed`, ...) are.
-- Log the panel session out when the integration is unloaded, as the bridge's shutdown handler does. No test checks
-  it (see "Coverage"), so a port that forgets it still passes the suite.
+- Log the panel session out when the integration is unloaded, as the bridge's shutdown handler does. The suite checks
+  that logout only where the bridge gives up after a new login did not help (`failures` in `system_scenarios.json`);
+  the signal path, the counterpart of unloading, has no test, so a port that forgets the logout on unload still passes
+  the suite.
 
 | JS | Python |
 | --- | --- |
@@ -156,14 +158,13 @@ git restore src/util.js
 
 Each row is pinned by tests titled `KNOWN BUG KB-n: ...` (files in `known_bugs/`, named like the test file they
 were split from) and by spec rows with `"known_bug": "KB-n"` (files in `spec/known_bugs/`). "Port" is a suggestion,
-not something the tests assert. The ids are not renumbered: KB-1, 2, 5, 9, 10, 11, 12, 13, 21, 23, 35, 39 and 40 are
-missing because they are fixed, and KB-7, 8, 17, 19, 20, 24 to 26, 29 to 34, 37, 38 and 41 to 43 because the tests that
-pinned them were removed: those of `config.js`, `mqtt_link.js` and `signal.js`, the child-process tests, and the MQTT
-connection, REST API, shutdown and configuration scenarios.
+not something the tests assert. The ids are not renumbered: KB-1, 2, 3, 5, 9, 10, 11, 12, 13, 21, 23, 35, 39 and 40
+are missing because they are fixed, and KB-7, 8, 17, 19, 20, 24 to 26, 29 to 34, 37, 38 and 41 to 43 because the
+tests that pinned them were removed: those of `config.js`, `mqtt_link.js` and `signal.js`, the child-process tests, and
+the MQTT connection, REST API, shutdown and configuration scenarios.
 
 | ID | What the code does today | Pinned in | Port |
 | --- | --- | --- | --- |
-| KB-3 | After a failed poll that a new login did not fix (the poll fails again less than 60 s after that login started), the bridge exits with code 1 without logging out: the session that login opened stays open until the panel times it out or the next start logs out | `system_scenarios.json` | log out before exiting |
 | KB-4 | Startup events are emitted before anyone can listen. Initial state is assumed (armed unknown, all sensors closed), so only *differences* are published after a start: closed sensors publish nothing and retained topics keep stale values | `status_machine.json`, `system_scenarios.json` | publish the full state at start |
 | KB-6 | `deepArrayEqual` is shallow and never equal for `NaN` (only affects log output) | `util.json` | - |
 | KB-14 | `arm`/`disarm` judge only the final response, after following redirects, and of the 2xx ones fail only on the login page (what an expired session gets): any other 2xx body, unrelated text or another page a redirect lands on, is success | `status_pages.json`, `alarm.test.ts` | verify the state change |
