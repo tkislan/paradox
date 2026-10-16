@@ -64,7 +64,7 @@ export const UtilSpec = z.strictObject({
     max_retries: z.number(),
     wait_ms: z.number(),
     attempts: z.array(z.union([z.strictObject({ returns: Returned }), z.strictObject({ throws: z.string() })])),
-    expected: z.strictObject({ calls: z.number(), returns: Returned.optional(), throws: z.string().optional() }),
+    expected: z.strictObject({ call_at_ms: z.array(z.number()), returns: Returned.optional(), throws: z.string().optional() }),
   })),
   objectEntries: z.array(z.strictObject({ ...row, object: z.record(z.string(), z.json()), expected: z.array(z.tuple([z.string(), z.json()])) })),
 });
@@ -129,6 +129,7 @@ const LoginRow = z.strictObject({ ...row, panel: Responses, expected: LoginOutco
 export const LoginCasesSpec = z.strictObject({
   ...comment,
   login: z.array(LoginRow),
+  index_retry: z.array(z.strictObject({ ...row, panel: Responses, expected: LoginOutcome.extend({ index_at_ms: z.array(z.number()) }) })),
   logout: z.array(z.strictObject({ ...row, panel: Responses, expected: z.strictObject({ error: z.string().optional() }) })),
   request_headers: z.array(z.strictObject({
     ...row,
@@ -142,8 +143,6 @@ export const LoginCasesSpec = z.strictObject({
 
 export const KnownBugLoginCasesSpec = z.strictObject({
   ...comment,
-  login: z.array(LoginRow),
-  index_retry: z.array(LoginRow),
   hangs: z.array(z.strictObject({ ...row, hang: z.string(), expected: z.strictObject({ request_counts: z.record(z.string(), z.number()) }) })),
 });
 
@@ -222,6 +221,7 @@ const Step = z.strictObject({
   panel_down: z.boolean().optional(),
   mqtt_command: z.union([z.enum(['arm', 'disarm']), z.strictObject({ topic: z.string(), payload: z.string() })]).optional(),
   advance_ms: z.number().optional(),
+  ready: z.boolean().optional(),
   expect: Expect.optional(),
 });
 export type Step = z.infer<typeof Step>;
@@ -230,6 +230,7 @@ export const ScenarioPanel = z.strictObject({
   ...PanelState,
   zones: z.array(Zone).optional(),
   accept_login: z.boolean().optional(),
+  default_page: Text.optional(),
   down: z.boolean().optional(),
   faults: z.array(PanelFault).optional(),
 });

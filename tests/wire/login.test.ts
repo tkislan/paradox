@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { withTitle } from '../support.ts';
 import {
-  FLOW_PATHS, SAMPLE_ZONES, crypto, expectHeaders, expectRequestCounts, golden, outcomeOf, runLoginScenario, spec,
-  startBridge, vector, warnings,
+  FLOW_PATHS, SAMPLE_ZONES, crypto, expectHeaders, expectRequestCounts, golden, outcomeOf, runIndexRetryScenario,
+  runLoginScenario, spec, startBridge, vector, warnings,
 } from '../helpers/login.ts';
+import { expectNoCredentials } from '../helpers/outcomes.ts';
 
 describe('login()', () => {
   it('logs in with the encrypted credentials and returns every zone slot', async () => {
@@ -100,6 +101,43 @@ describe('login()', () => {
     expect(outcome).toEqual({ value: { zoneTuples: [[16, 'Area five'], [1, 'One']] } });
   });
 
+  it('rejects a wrong password and leaves no session', async () => {
+    // What a real panel answers to wrong credentials was not captured (README), so its error message is not checked here.
+    const { panel, login } = await startBridge({ env: { PASSWORD: 'not the password' } });
+
+    const outcome = await outcomeOf(login());
+
+    expect(outcome).toEqual({ error: expect.any(Error) });
+    expect(panel.loggedIn).toBe(false);
+    expectRequestCounts(panel, { '/logout.html': 1, '/login_page.html': 1, '/default.html': 1, '/index.html': 0 });
+  });
+
+  it('logs the panel session out when the login fails after the credentials were accepted', async () => {
+    const { panel, login } = await startBridge({
+      responses: { '/index.html': { body: '<html><head></head><body>nothing here</body></html>' } },
+    });
+
+    const outcome = await outcomeOf(login());
+
+    expect(outcome.error?.message).toBe("Regex didn't match the value");
+    expect(panel.loggedIn).toBe(false);
+    expect(panel.requestLines.map((line) => line.split('?')[0])).toEqual([
+      'GET /logout.html', 'GET /login_page.html', 'GET /default.html', 'GET /index.html', 'GET /logout.html',
+    ]);
+  });
+
+  it.each([
+    ['HTTP 500', { status: 500 }, 'Request failed with status code 500'],
+    ['a reset connection', { destroy: true }, 'socket hang up'],
+  ])('a default.html request failing with %s rejects with its message and without the hashed credentials', async (_what, response, message) => {
+    const { login } = await startBridge({ responses: { '/default.html': response } });
+
+    const outcome = await outcomeOf(login());
+
+    expect(outcome.error?.message).toBe(message);
+    expectNoCredentials(outcome.error, golden);
+  });
+
   it('rejects with the connection error when the panel is down, after a warning for the logout', async () => {
     const { panel, output, login } = await startBridge();
     await panel.stop();
@@ -110,6 +148,10 @@ describe('login()', () => {
     expect(outcome.error?.message).toContain('ECONNREFUSED');
     expect(warnings(output)).toEqual(['Logout before login failed']);
   });
+});
+
+describe('login() index page retry', () => {
+  it.each(withTitle(spec.index_retry))('$title', runIndexRetryScenario);
 });
 
 describe('login() request headers', () => {

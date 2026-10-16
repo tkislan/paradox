@@ -25,7 +25,7 @@ The tests are TypeScript that vitest runs as is (it strips the types, nothing is
 checks them together with `src/`, with the same settings: `strict`, but unannotated parameters allowed (`any`).
 `tests/package.json` marks them as ES modules, which they are under vitest.
 
-About 640 tests, 10 s. `npx vitest run --exclude 'tests/known_bugs/**'` skips the 101 that pin a defect. In agent/CI
+About 650 tests, 10 s. `npx vitest run --exclude 'tests/known_bugs/**'` skips the 79 that pin a defect. In agent/CI
 environments vitest may pick a reporter that hides console output; use `npx vitest run --reporter=default` to see
 whether a change made the suite noisy (it must stay silent).
 
@@ -38,13 +38,16 @@ versions production installs.
 
 ## Coverage
 
-94.7 % of lines, 96.3 % of branches. Dead code in `src/` is not covered: the `default:` case of the sensor handler
+95.1 % of lines, 96.3 % of branches. Dead code in `src/` is not covered: the `default:` case of the sensor handler
 (`app.js:43`, the value is always a boolean) and `initSensorStatus` (`status_listener.js:48-50`, never called).
 Deliberately without a test, because a Home Assistant integration has nothing like them: the REST API (`app.js`),
-signal handling and shutdown (`signal.js`), the missing-variable check (`config.js`), MQTT connection failures
-(`mqtt_link.js`) and the `playground.js` script. `config.js`, `mqtt_link.js`, `keep_alive_worker.js` and `signal.js`
-have no tests of their own; the system tests only run them, so they show as covered even where no assertion would
-notice a changed value.
+signal handling and shutdown (`signal.js` and the shutdown handler in `app.js`, which stops the timers and closes the
+REST server), the missing-variable check (`config.js`), MQTT connection failures (`mqtt_link.js`) and the
+`playground.js` script. The shutdown handler also logs the panel session out, which an integration does need when it
+is unloaded; that has no test only because the signal and shutdown tests were dropped (see "Porting to Python").
+`config.js`, `mqtt_link.js`, `keep_alive_worker.js` and `signal.js` have no tests of their own; the system tests only
+run them, so they show as covered even where no assertion would notice a changed value. The same goes for the
+shutdown handler, which the system tests' cleanup calls.
 
 ## Layout
 
@@ -70,10 +73,10 @@ notice a changed value.
   `known_bugs/`, rows in `spec/known_bugs/`, tables only they use in `fixtures/known_bugs/`; `unit/known_bug_layout.test.ts`
   fails when one turns up elsewhere. The program has run for years, so these are improvements to consider rather
   than requirements: everything outside those paths is what a port has to meet, and a port decides per entry whether
-  to keep or fix the behavior (the catalog says what the sensible fix is). Three entries cannot be kept apart, because
+  to keep or fix the behavior (the catalog says what the sensible fix is). Two entries cannot be kept apart, because
   ordinary tests depend on them as well: KB-4 (after a start only differences are published, which most scenarios'
-  first poll assumes), KB-5 (retries do not wait) and KB-9 (the keep-alive request is exactly
-  `GET /keep_alive.html?msgid=1`). A port that fixes one of them updates those tests along with it.
+  first poll assumes) and KB-9 (the keep-alive request is exactly `GET /keep_alive.html?msgid=1`). A port that fixes
+  one of them updates those tests along with it.
 - **Test files hold test cases only.** Setup, assertion helpers, scenario interpreters and data tables live in `helpers/` and `fixtures/` (one module per test file, plus a few shared ones: `outcomes`, `responses`, `panel_faults`), which is what a port re-creates as `conftest.py` and helper modules; the test files then translate one to one.
 - **Black box at the lowest observable boundary**: HTTP requests/responses, MQTT messages, `process.exit` codes. No
   `vi.mock` of modules (it cannot intercept the CommonJS `require` graph and would tie tests to the implementation);
@@ -82,9 +85,9 @@ notice a changed value.
 - **Data before code.** If a behavior is "input -> output", it is a row in `spec/<topic>.json`:
   `{ "name", ...inputs, "expected", "known_bug"?, "note"? }`, and its format is in `spec/schemas.ts`. The JS test is a
   thin `it.each` loop, which is also what `pytest.mark.parametrize` over the same file looks like.
-- **Time**: the bridge's own timers (1 s poll, 3 s keep-alive, 5 s MQTT connect timeout) run on a fake clock
-  (`useFakeClock`); sockets are real. Wait for effects with `waitFor`; `settle()` is only for "nothing
-  happened" assertions, and with a broker only after `broker.barrier()`.
+- **Time**: the bridge's own timers (1 s poll, 3 s keep-alive, 5 s MQTT connect timeout, 1 s between index page
+  attempts at login) run on a fake clock (`useFakeClock`); sockets are real. Wait for effects with `waitFor`;
+  `settle()` is only for "nothing happened" assertions, and with a broker only after `broker.barrier()`.
 - **Isolation**: `setBridgeEnv()` before `require`-ing a module from `src/` (config.js reads the environment once at
   require time); each test gets fresh `src/` modules.
   Harness objects register their own cleanup; process signal listeners need `isolateProcessListeners()`.
@@ -120,6 +123,8 @@ projects), then the parsing tables (`status_pages`, `login_cases`), then `status
 - Rows with `"js_only"` (one `rc4` vector in `crypto.json`) depend on JavaScript semantics (`NaN`).
 - Error strings that come from axios or V8 (`Request failed with status code 500`, `socket hang up`) are not
   portable; only the fact of failing is. The bridge's own messages (`Login failed`, ...) are.
+- Log the panel session out when the integration is unloaded, as the bridge's shutdown handler does. No test checks
+  it (see "Coverage"), so a port that forgets it still passes the suite.
 
 | JS | Python |
 | --- | --- |
@@ -144,20 +149,17 @@ git restore src/util.js
 
 Each row is pinned by tests titled `KNOWN BUG KB-n: ...` (files in `known_bugs/`, named like the test file they
 were split from) and by spec rows with `"known_bug": "KB-n"` (files in `spec/known_bugs/`). "Port" is a suggestion,
-not something the tests assert. The ids are not renumbered: KB-1, 2, 10, 21, 23, 39 and 40 are missing because they
-are fixed, and KB-7, 8, 17, 19, 20, 24 to 26, 29 to 34, 37, 38 and 41 to 43 because the tests that pinned them were
-removed: those of `config.js`, `mqtt_link.js` and `signal.js`, the child-process tests, and the MQTT connection, REST
-API, shutdown and configuration scenarios.
+not something the tests assert. The ids are not renumbered: KB-1, 2, 3, 5, 10, 11, 21, 23, 35, 39 and 40 are missing
+because they are fixed, and KB-7, 8, 17, 19, 20, 24 to 26, 29 to 34, 37, 38 and 41 to 43 because the tests that
+pinned them were removed: those of `config.js`, `mqtt_link.js` and `signal.js`, the child-process tests, and the MQTT
+connection, REST API, shutdown and configuration scenarios.
 
 | ID | What the code does today | Pinned in | Port |
 | --- | --- | --- | --- |
-| KB-3 | Never logs out: the shutdown handler returns the `logout` function without calling it, and no failure path logs out either. Only the next start's best-effort logout frees the (single) panel session | `login.test.ts` | log out on unload |
 | KB-4 | Startup events are emitted before anyone can listen. Initial state is assumed (armed unknown, all sensors closed), so only *differences* are published after a start: closed sensors publish nothing and retained topics keep stale values | `status_machine.json`, `system_scenarios.json` | publish the full state at start |
-| KB-5 | `retry` ignores its wait time: the index page is requested up to 11 times back to back. Only failed requests are retried, not a 200 that does not parse | `util.json`, `login_cases.json` | back off |
 | KB-6 | `deepArrayEqual` is shallow and never equal for `NaN` (only affects log output) | `util.json` | - |
 | KB-9 | The keep-alive's random cache-buster is dropped by axios (`null` value): the wire request is `GET /keep_alive.html?msgid=1` | `status_pages.json`, `status.test.ts` | check against a real panel |
-| KB-11 | The title regex does not cross newlines, so a pretty-printed page never matches and the error is the copy-pasted "Session value not found in login page". The captured `login_page.html` is multi-line, so wrong credentials surface that way and "Login failed" is practically unreachable | `login_cases.json`, `login.test.ts` | real HTML parsing |
-| KB-12 | No session recovery: the first failed poll (HTTP error, refused connection, or the login page after the session expired) ends the bridge with exit 1 and relies on Docker to restart it. The listener itself recovers on the next good poll | `status_machine.json`, `system_scenarios.json` | detect expiry, re-login |
+| KB-12 | No session recovery: the first failed poll (HTTP error, refused connection, or the login page after the session expired) ends the bridge with exit 1 without logging out and relies on Docker to restart it; the (single) panel session stays open until that next start's logout. The listener itself recovers on the next good poll | `status_machine.json`, `system_scenarios.json` | detect expiry, re-login |
 | KB-13 | No HTTP timeouts and no in-flight guard: a hung panel hangs every call, polls overlap, a late stale response overwrites newer state | `status_pages.json`, `status_machine.json`, `*.test.ts` | timeouts, one request at a time |
 | KB-14 | `arm`/`disarm` ignore the response: any 2xx (including the login page after expiry) is success | `status_pages.json`, `alarm.test.ts` | verify the state change |
 | KB-15 | Alarm and trouble tables are never parsed (`alarms` is always `[0]`) | `status_pages.json` | parse them |
@@ -166,7 +168,6 @@ API, shutdown and configuration scenarios.
 | KB-22 | `useraccess` 3 (in alarm) is "unknown" like an unused area and publishes nothing, so an alarm is never reported | `status_machine.json` | report the alarm |
 | KB-27 | An error in the poll callback (no `'error'` listener, after `stop()`, or a throwing listener) is an unhandled promise rejection | `status_listener.test.ts` | - |
 | KB-28 | The keep-alive ignores its response, like `arm` | `status_pages.json`, `status.test.ts` | - |
-| KB-35 | A failed login logs the whole axios error, including the hashed credentials | `app.test.ts` | redact |
 | KB-36 | A table the pattern does not find logs the whole page and the pattern | `status.test.ts` | - |
 
 Not tests, only observations: the config names `HOSTNAME`, `USERNAME` and `PASSWORD` collide with

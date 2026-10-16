@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
-import { deepArrayEqual, retry } from '../../src/util.js';
-import { cases, loadKnownBugSpec, useFakeClock, waitFor } from '../support.ts';
+import { describe, expect, it } from 'vitest';
+import { deepArrayEqual } from '../../src/util.js';
+import { cases, loadKnownBugSpec } from '../support.ts';
 import { expectDeepArrayEqual } from '../helpers/util.ts';
 import { KnownBugUtilSpec } from '../spec/schemas.ts';
 
@@ -21,27 +21,5 @@ describe('deepArrayEqual', () => {
 
     expect(deepArrayEqual(withNaN, withNaN)).toBe(false);
     expect(deepArrayEqual([NaN], [NaN])).toBe(false);
-  });
-});
-
-describe('retry', () => {
-  it('KNOWN BUG KB-5: retries run back to back, the wait time is never used', async () => {
-    useFakeClock();
-    const pendingTimersAtCall: number[] = [];
-    // retry() resolves with f's value, although its JSDoc types f as returning Promise<void>.
-    const f = vi.fn(async (): Promise<any> => {
-      pendingTimersAtCall.push(vi.getTimerCount());
-      if (f.mock.calls.length < 4) throw new Error('not yet');
-      return 'ok';
-    });
-    let result;
-    retry(10, 1000, f).then((value) => { result = value; });
-
-    // The fake clock never advances: a retry that slept 1000 ms between attempts could not finish.
-    await waitFor(() => result, { timeout: 500, message: 'retry to finish without any waiting' });
-
-    expect(result).toBe('ok');
-    expect(f).toHaveBeenCalledTimes(4);
-    expect(pendingTimersAtCall).toEqual([0, 0, 0, 0]);
   });
 });

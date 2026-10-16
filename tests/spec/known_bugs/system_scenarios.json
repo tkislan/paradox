@@ -226,20 +226,6 @@
         {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}},
         {"advance_ms": 1000, "expect": {"panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}}
       ]
-    },
-    {
-      "name": "a successful login answered with a pretty-printed default page cannot be recognised and exits with code 1",
-      "known_bug": "KB-11",
-      "note": "The title regex does not span lines, so an indented multi-line head fails to match.",
-      "panel": {"faults": [{"path": "/default.html", "kind": "page", "page": {"file": "data/pretty_default_page.html"}}]},
-      "start": {"ready": false, "expect": {"panel_requests": ["GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255"], "process_exit": [1]}}
-    },
-    {
-      "name": "a permanently failing index page is requested 11 times back to back, then exit code 1",
-      "known_bug": "KB-5",
-      "note": "The retry helper ignores its wait time.",
-      "panel": {"faults": [{"path": "/index.html", "kind": "http_500"}]},
-      "start": {"ready": false, "expect": {"panel_requests": ["GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html", "GET /index.html", "GET /index.html", "GET /index.html", "GET /index.html", "GET /index.html", "GET /index.html", "GET /index.html", "GET /index.html", "GET /index.html", "GET /index.html"], "process_exit": [1]}}
     }
   ]
 }

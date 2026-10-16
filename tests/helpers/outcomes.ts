@@ -1,3 +1,6 @@
+import { inspect } from 'node:util';
+import { expect } from 'vitest';
+
 /** The reason `promise` rejects with, whatever was thrown. */
 export async function rejection(promise: Promise<unknown>): Promise<any> {
   try {
@@ -16,4 +19,12 @@ export function track(promise) {
     (error) => Object.assign(result, { state: 'rejected', error }),
   );
   return result;
+}
+
+/** Fails if the hashed panel credentials show up anywhere in `value`, however deeply nested. */
+export function expectNoCredentials(value, { u, p }: { u: string; p: string }) {
+  const text = inspect(value, { depth: null });
+
+  expect(text).not.toContain(u);
+  expect(text).not.toContain(p);
 }

@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
-import { expect } from 'vitest';
+import { expect, vi } from 'vitest';
 import { FakePanel, type FakePanelOptions, type PanelResult, renderIndexPage, type Zone } from '../mock_paradox.ts';
-import { captureConsole, loadSpec, setBridgeEnv, specText } from '../support.ts';
+import { captureConsole, loadSpec, setBridgeEnv, settle, specText, useFakeClock, waitFor } from '../support.ts';
 import { CryptoSpec, LoginCasesSpec, type ResponseRule } from '../spec/schemas.ts';
 
 const require = createRequire(import.meta.url);
@@ -86,12 +86,36 @@ export function expectRequestCounts(panel, counts: Record<string, number>) {
 export async function runLoginScenario(row) {
   const bridge = await startBridge({ responses: row.panel });
 
-  await expectScenario(row, bridge);
+  await expectScenario(row, bridge, await outcomeOf(bridge.login()));
 }
 
-export async function expectScenario(row, { panel, output, login }) {
-  const outcome = await outcomeOf(login());
+/**
+ * Plays an index_retry row on the fake clock: before each further /index.html attempt the clock stops 1 ms short of its
+ * time in expected.index_at_ms, where no new request may have come, then moves on to it.
+ */
+export async function runIndexRetryScenario(row) {
+  const clock = useFakeClock();
+  const bridge = await startBridge({ responses: row.panel });
+  let outcome;
+  outcomeOf(bridge.login()).then((settled) => { outcome = settled; });
+  const times = row.expected.index_at_ms;
+  const attempts = () => bridge.panel.requestsTo('/index.html').length;
 
+  await waitFor(() => attempts() >= 1, { message: 'the first index page request' });
+  for (let attempt = 1; attempt < times.length; attempt += 1) {
+    // Moving the clock before the failed attempt has started its wait would skip past the wait unnoticed.
+    await waitFor(() => vi.getTimerCount() > 0, { message: `the wait before index page request ${attempt + 1}` });
+    await clock.advance(times[attempt] - times[attempt - 1] - 1);
+    await settle();
+    expect(attempts()).toBe(attempt);
+    await clock.advance(1);
+    await waitFor(() => attempts() > attempt, { message: `index page request ${attempt + 1}` });
+  }
+  await waitFor(() => outcome, { message: 'login() to settle without another wait' });
+  await expectScenario(row, bridge, outcome);
+}
+
+export async function expectScenario(row, { panel, output }, outcome) {
   if (row.expected.error !== undefined) {
     expect(outcome.value).toBeUndefined();
     expect(outcome.error?.message).toBe(row.expected.error);

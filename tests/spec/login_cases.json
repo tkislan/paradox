@@ -1,5 +1,5 @@
 {
-  "_comment": "Scenarios for src/api/login.js: login() is run against a fake panel and must resolve to expected.zoneTuples or reject with expected.error (exact message). Unless a row says otherwise the panel behaves like mock_paradox.ts with session value 91AC25D06A0C26BA, accepts the u/p of crypto.json 'sample session, 4 digit code' (username user, password 1234) and lists the six sample zones. 'panel' overrides the answer for one request path: a response or a list of responses used in order; each response is {file} (relative to tests/), {body}, {status[, headers][, body]} (200, no extra headers and an empty body when omitted), {zones} (the index page with these [area bitmask, name] slots, padded to 32 slots with [0, ' '] like the real panel), {zones_by_slot} (the same, sparse: slot index -> [area bitmask, name]), {destroy} (the connection is reset) or {hang} (never answered); 'times' limits how often a response is used (forever when omitted). 'expected.default_query' is the exact query string of the first /default.html request. 'expected.request_counts' is how often the panel was asked for each path (a path that is not listed was never asked; one request to each of /logout.html, /login_page.html, /default.html and /index.html when the whole object is omitted). 'expected.warnings' are the messages logged with console.warn (none when omitted). Error messages starting with 'Request failed' come from axios and 'socket hang up' / 'connect ECONNREFUSED' from Node's http client: a port only has to fail there. Rows that pin a defect on purpose (known_bug) are in known_bugs/login_cases.json, in the same groups.",
+  "_comment": "Scenarios for src/api/login.js: login() is run against a fake panel and must resolve to expected.zoneTuples or reject with expected.error (exact message). Unless a row says otherwise the panel behaves like mock_paradox.ts with session value 91AC25D06A0C26BA, accepts the u/p of crypto.json 'sample session, 4 digit code' (username user, password 1234) and lists the six sample zones. 'panel' overrides the answer for one request path: a response or a list of responses used in order; each response is {file} (relative to tests/), {body}, {status[, headers][, body]} (200, no extra headers and an empty body when omitted), {zones} (the index page with these [area bitmask, name] slots, padded to 32 slots with [0, ' '] like the real panel), {zones_by_slot} (the same, sparse: slot index -> [area bitmask, name]), {destroy} (the connection is reset) or {hang} (never answered); 'times' limits how often a response is used (forever when omitted). 'expected.default_query' is the exact query string of the first /default.html request. 'expected.request_counts' is how often the panel was asked for each path (a path that is not listed was never asked; one request to each of /logout.html, /login_page.html, /default.html and /index.html when the whole object is omitted). A login that fails after the panel accepted the credentials logs out again, so such rows count two /logout.html requests. 'expected.warnings' are the messages logged with console.warn (none when omitted). index_retry rows run on a fake clock: 'expected.index_at_ms' is when each /index.html request is made, in ms from the first one; a request may not come a millisecond earlier, and login() settles right after the last one without waiting further. Error messages starting with 'Request failed' come from axios and 'socket hang up' / 'connect ECONNREFUSED' from Node's http client: a port only has to fail there. Rows that pin a defect on purpose (known_bug) are in known_bugs/login_cases.json, in the same groups.",
 
   "login": [
     {
@@ -286,38 +286,38 @@
     {
       "name": "an index page without tbl_zone makes login fail",
       "panel": { "/index.html": { "body": "<html><head></head><body>nothing here</body></html>" } },
-      "expected": { "error": "Regex didn't match the value" }
+      "expected": { "error": "Regex didn't match the value", "request_counts": { "/logout.html": 2, "/login_page.html": 1, "/default.html": 1, "/index.html": 1 } }
     },
     {
       "name": "the login page in place of the index page makes login fail without a retry",
       "panel": { "/index.html": { "file": "data/login_page.html" } },
-      "expected": { "error": "Regex didn't match the value" },
+      "expected": { "error": "Regex didn't match the value", "request_counts": { "/logout.html": 2, "/login_page.html": 1, "/default.html": 1, "/index.html": 1 } },
       "note": "Retries cover failed requests only; a 200 page that does not parse ends login at once (one /index.html request)."
     },
     {
       "name": "tbl_zone without spaces around the equals sign is not found",
       "panel": { "/index.html": { "body": "<html><script>tbl_zone=new Array(1,\"A\");</script></html>" } },
-      "expected": { "error": "Regex didn't match the value" }
+      "expected": { "error": "Regex didn't match the value", "request_counts": { "/logout.html": 2, "/login_page.html": 1, "/default.html": 1, "/index.html": 1 } }
     },
     {
       "name": "tbl_zone without a space before the equals sign is not found",
       "panel": { "/index.html": { "body": "<html><script>tbl_zone= new Array(1,\"A\");</script></html>" } },
-      "expected": { "error": "Regex didn't match the value" }
+      "expected": { "error": "Regex didn't match the value", "request_counts": { "/logout.html": 2, "/login_page.html": 1, "/default.html": 1, "/index.html": 1 } }
     },
     {
       "name": "tbl_zone without a space after the equals sign is not found",
       "panel": { "/index.html": { "body": "<html><script>tbl_zone =new Array(1,\"A\");</script></html>" } },
-      "expected": { "error": "Regex didn't match the value" }
+      "expected": { "error": "Regex didn't match the value", "request_counts": { "/logout.html": 2, "/login_page.html": 1, "/default.html": 1, "/index.html": 1 } }
     },
     {
       "name": "a space after a comma in the zone list is not accepted",
       "panel": { "/index.html": { "body": "<html><script>tbl_zone = new Array(1, \"A\");</script></html>" } },
-      "expected": { "error": "Regex didn't match the value" }
+      "expected": { "error": "Regex didn't match the value", "request_counts": { "/logout.html": 2, "/login_page.html": 1, "/default.html": 1, "/index.html": 1 } }
     },
     {
       "name": "a zone list without its closing parenthesis makes login fail",
       "panel": { "/index.html": { "body": "<html><script>tbl_zone = new Array(1,\"A\"" } },
-      "expected": { "error": "Regex didn't match the value" }
+      "expected": { "error": "Regex didn't match the value", "request_counts": { "/logout.html": 2, "/login_page.html": 1, "/default.html": 1, "/index.html": 1 } }
     },
     {
       "name": "several spaces around the equals sign are accepted",
@@ -337,12 +337,12 @@
     {
       "name": "a line break after the equals sign is not accepted",
       "panel": { "/index.html": { "body": "<html><script>tbl_zone =\nnew Array(1,\"A\");</script></html>" } },
-      "expected": { "error": "Regex didn't match the value" }
+      "expected": { "error": "Regex didn't match the value", "request_counts": { "/logout.html": 2, "/login_page.html": 1, "/default.html": 1, "/index.html": 1 } }
     },
     {
       "name": "the variable name is matched case-sensitively",
       "panel": { "/index.html": { "body": "<html><script>TBL_ZONE = new Array(1,\"A\");</script></html>" } },
-      "expected": { "error": "Regex didn't match the value" }
+      "expected": { "error": "Regex didn't match the value", "request_counts": { "/logout.html": 2, "/login_page.html": 1, "/default.html": 1, "/index.html": 1 } }
     },
     {
       "name": "tbl_zone is found when declared with var and indented",
@@ -365,6 +365,18 @@
     {
       "name": "other head content after the title is accepted",
       "panel": { "/default.html": { "body": "<html><head><title>Paradox IP Module</title><script>var a;</script></head><body></body></html>" } },
+      "expected": {
+        "zoneTuples": [
+          [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
+    },
+    {
+      "name": "the first title of the page is the one compared, even with another title later on the same line",
+      "panel": { "/default.html": { "body": "<html><head><title>Paradox IP Module</title></head><body><svg><title>Logo</title></svg></body></html>" } },
       "expected": {
         "zoneTuples": [
           [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
@@ -403,6 +415,94 @@
       "name": "a title that only ends with the expected text is a rejected login",
       "panel": { "/default.html": { "body": "<html><head><title>Not Paradox IP Module</title></head></html>" } },
       "expected": { "error": "Login failed", "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1 } }
+    },
+    {
+      "name": "wrong credentials answered with the real multi-line login page are a rejected login",
+      "panel": { "/default.html": { "file": "data/login_page.html" } },
+      "expected": { "error": "Login failed", "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1 } },
+      "note": "The captured login page is titled Objekt. The fake panel answers wrong credentials with it; what a real panel answers was not captured (tests/README.md, 'What the fake panel invents')."
+    },
+    {
+      "name": "a pretty-printed multi-line default page is a successful login",
+      "panel": { "/default.html": { "file": "data/pretty_default_page.html" } },
+      "expected": {
+        "zoneTuples": [
+          [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
+    },
+    {
+      "name": "a default page without a title fails as such",
+      "panel": { "/default.html": { "body": "<html><head></head><body>hello</body></html>" } },
+      "expected": { "error": "Title not found in default page", "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1 } }
+    },
+    {
+      "name": "an empty default page has no title",
+      "panel": { "/default.html": { "body": "" } },
+      "expected": { "error": "Title not found in default page", "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1 } }
+    },
+    {
+      "name": "upper-case head and title tags are recognised",
+      "panel": { "/default.html": { "body": "<HTML><HEAD><TITLE>Paradox IP Module</TITLE></HEAD></HTML>" } },
+      "expected": {
+        "zoneTuples": [
+          [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
+    },
+    {
+      "name": "a head element that closes on the next line is recognised",
+      "panel": { "/default.html": { "body": "<html><head><title>Paradox IP Module</title>\n</head></html>" } },
+      "expected": {
+        "zoneTuples": [
+          [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
+    },
+    {
+      "name": "a title without a closing head tag is recognised",
+      "panel": { "/default.html": { "body": "<html><head><title>Paradox IP Module</title></html>" } },
+      "expected": {
+        "zoneTuples": [
+          [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
+    },
+    {
+      "name": "a title outside any head element is recognised",
+      "panel": { "/default.html": { "body": "<html><title>Paradox IP Module</title></html>" } },
+      "expected": {
+        "zoneTuples": [
+          [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
+    },
+    {
+      "name": "a head element with attributes is recognised",
+      "panel": { "/default.html": { "body": "<html><head lang=\"en\"><title>Paradox IP Module</title></head></html>" } },
+      "expected": {
+        "zoneTuples": [
+          [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
     },
 
     {
@@ -559,6 +659,15 @@
         "warnings": ["Logout before login failed"]
       }
     },
+    {
+      "name": "a failing logout after a failed login is only a warning, the login error is reported",
+      "panel": { "/logout.html": { "status": 500 }, "/index.html": { "body": "<html><head></head><body>nothing here</body></html>" } },
+      "expected": {
+        "error": "Regex didn't match the value",
+        "request_counts": { "/logout.html": 2, "/login_page.html": 1, "/default.html": 1, "/index.html": 1 },
+        "warnings": ["Logout before login failed", "Logout after failed login failed"]
+      }
+    },
 
     {
       "name": "a redirect of the default page is followed",
@@ -590,6 +699,92 @@
           [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
         ],
         "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1, "/index.html": 1, "/index_moved.html": 1 }
+      }
+    }
+  ],
+
+  "index_retry": [
+    {
+      "name": "a failed index page request is retried after 1000 ms",
+      "panel": { "/index.html": { "status": 500, "times": 1 } },
+      "expected": {
+        "zoneTuples": [
+          [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ],
+        "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1, "/index.html": 2 },
+        "index_at_ms": [0, 1000]
+      }
+    },
+    {
+      "name": "three failures are retried 1000 ms apart",
+      "panel": { "/index.html": { "status": 404, "times": 3 } },
+      "expected": {
+        "zoneTuples": [
+          [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ],
+        "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1, "/index.html": 4 },
+        "index_at_ms": [0, 1000, 2000, 3000]
+      }
+    },
+    {
+      "name": "reset connections are retried like HTTP errors",
+      "panel": { "/index.html": { "destroy": true, "times": 2 } },
+      "expected": {
+        "zoneTuples": [
+          [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ],
+        "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1, "/index.html": 3 },
+        "index_at_ms": [0, 1000, 2000]
+      }
+    },
+    {
+      "name": "ten failures still succeed on the eleventh attempt, 10 s after the first",
+      "panel": { "/index.html": { "status": 500, "times": 10 } },
+      "expected": {
+        "zoneTuples": [
+          [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ],
+        "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1, "/index.html": 11 },
+        "index_at_ms": [0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000]
+      }
+    },
+    {
+      "name": "eleven failures reject after exactly eleven attempts and log the session out",
+      "panel": { "/index.html": { "status": 500 } },
+      "expected": {
+        "error": "Request failed with status code 500",
+        "request_counts": { "/logout.html": 2, "/login_page.html": 1, "/default.html": 1, "/index.html": 11 },
+        "index_at_ms": [0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000]
+      }
+    },
+    {
+      "name": "eleven reset connections reject after exactly eleven attempts and log the session out",
+      "panel": { "/index.html": { "destroy": true } },
+      "expected": {
+        "error": "socket hang up",
+        "request_counts": { "/logout.html": 2, "/login_page.html": 1, "/default.html": 1, "/index.html": 11 },
+        "index_at_ms": [0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000]
+      }
+    },
+    {
+      "name": "the error of the last attempt is the one reported",
+      "panel": { "/index.html": [{ "destroy": true, "times": 10 }, { "status": 503 }] },
+      "expected": {
+        "error": "Request failed with status code 503",
+        "request_counts": { "/logout.html": 2, "/login_page.html": 1, "/default.html": 1, "/index.html": 11 },
+        "index_at_ms": [0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000]
       }
     }
   ],

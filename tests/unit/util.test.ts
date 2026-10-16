@@ -3,6 +3,7 @@ import { deepArrayEqual, getJsValue, iterateTuples, objectEntries, retry, sleep 
 import {
   captureConsole, cases, loadSpec, settle, specText, spyProcessExit, useFakeClock, waitFor,
 } from '../support.ts';
+import { track } from '../helpers/outcomes.ts';
 import { expectDeepArrayEqual, expectJsValue, expectTuples, scripted } from '../helpers/util.ts';
 import { UtilSpec } from '../spec/schemas.ts';
 
@@ -140,14 +141,30 @@ describe('iterateTuples', () => {
 
 describe('retry', () => {
   it.each(cases(spec.retry))('%s', async (_title, { max_retries: max, wait_ms: wait, attempts, expected }) => {
+    const clock = useFakeClock();
     const f = scripted(attempts);
+    let outcome = {};
+    retry(max, wait, f).then((returns) => { outcome = { returns }; }, (error) => { outcome = { throws: error.message }; });
 
-    const outcome = await retry(max, wait, f).then(
-      (returns) => ({ calls: f.calls, returns }),
-      (error) => ({ calls: f.calls, throws: error.message }),
-    );
+    await clock.advance(expected.call_at_ms.at(-1));
 
-    expect(outcome).toStrictEqual(expected);
+    expect({ call_at_ms: f.calledAt, ...outcome }).toStrictEqual(expected);
+  });
+
+  it('starts a new attempt only once the wait time has passed', async () => {
+    const clock = useFakeClock();
+    const f = vi.fn().mockRejectedValueOnce(new Error('e1')).mockRejectedValueOnce(new Error('e2')).mockResolvedValue('ok');
+    const call = track(retry(10, 1000, f));
+
+    await clock.advance(999);
+    expect(f).toHaveBeenCalledTimes(1);
+    await clock.advance(1);
+    expect(f).toHaveBeenCalledTimes(2);
+    await clock.advance(999);
+    expect(f).toHaveBeenCalledTimes(2);
+    await clock.advance(1);
+    expect(f).toHaveBeenCalledTimes(3);
+    expect(call).toEqual({ state: 'resolved', value: 'ok' });
   });
 
   it('passes the extra arguments to every attempt', async () => {

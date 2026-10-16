@@ -1,5 +1,5 @@
 {
-  "_comment": "Case tables for src/util.js. Rows that pin a defect on purpose (known_bug) are in known_bugs/util.json, in the same groups. A missing or null array in deepArrayEqual means 'no array' (undefined in JS, None in Python). getJsValue rows: content is a string or {file} relative to tests/; pattern is a regex source (JS and Python agree on every pattern here; flags are never needed); capture group 1 is read as JSON, except that a capture that is exactly new Array(...) is read as [...] with one trailing comma dropped. getJsValue_not_json rows are text that is not JSON even so: getJsValue throws a SyntaxError (Python's json.loads raises ValueError), the text is never run. Retry rows: attempts is the script of successive calls, throws raises an error with that message, expected.throws is the message of the error that comes out. Expected values of the captured-page rows were extracted independently with Python's re and json.",
+  "_comment": "Case tables for src/util.js. Rows that pin a defect on purpose (known_bug) are in known_bugs/util.json, in the same groups. A missing or null array in deepArrayEqual means 'no array' (undefined in JS, None in Python). getJsValue rows: content is a string or {file} relative to tests/; pattern is a regex source (JS and Python agree on every pattern here; flags are never needed); capture group 1 is read as JSON, except that a capture that is exactly new Array(...) is read as [...] with one trailing comma dropped. getJsValue_not_json rows are text that is not JSON even so: getJsValue throws a SyntaxError (Python's json.loads raises ValueError), the text is never run. Retry rows: attempts is the script of successive calls, throws raises an error with that message, expected.throws is the message of the error that comes out. expected.call_at_ms is when each call starts, in ms of a fake clock from the call of retry; retry settles at the last of them, so it never waits after the last attempt. Expected values of the captured-page rows were extracted independently with Python's re and json.",
   "deepArrayEqual": [
     {
       "name": "empty arrays are equal",
@@ -542,70 +542,77 @@
       "max_retries": 3,
       "wait_ms": 1000,
       "attempts": [{"returns": "ok"}],
-      "expected": {"calls": 1, "returns": "ok"}
+      "expected": {"call_at_ms": [0], "returns": "ok"}
     },
     {
       "name": "returns what the function returned, falsy values included",
       "max_retries": 3,
       "wait_ms": 1000,
       "attempts": [{"returns": 0}],
-      "expected": {"calls": 1, "returns": 0}
+      "expected": {"call_at_ms": [0], "returns": 0}
     },
     {
       "name": "null result is returned, not retried",
       "max_retries": 3,
       "wait_ms": 1000,
       "attempts": [{"returns": null}],
-      "expected": {"calls": 1, "returns": null}
+      "expected": {"call_at_ms": [0], "returns": null}
     },
     {
       "name": "one failure, then success",
       "max_retries": 3,
       "wait_ms": 1000,
       "attempts": [{"throws": "e1"}, {"returns": "ok"}],
-      "expected": {"calls": 2, "returns": "ok"}
+      "expected": {"call_at_ms": [0, 1000], "returns": "ok"}
     },
     {
       "name": "succeeds on the last allowed attempt",
       "max_retries": 2,
       "wait_ms": 1000,
       "attempts": [{"throws": "e1"}, {"throws": "e2"}, {"returns": "ok"}],
-      "expected": {"calls": 3, "returns": "ok"}
+      "expected": {"call_at_ms": [0, 1000, 2000], "returns": "ok"}
     },
     {
       "name": "one attempt too late: gives up after max_retries + 1 calls and rethrows the LAST error",
       "max_retries": 2,
       "wait_ms": 1000,
       "attempts": [{"throws": "e1"}, {"throws": "e2"}, {"throws": "e3"}, {"returns": "too late"}],
-      "expected": {"calls": 3, "throws": "e3"}
+      "expected": {"call_at_ms": [0, 1000, 2000], "throws": "e3"}
     },
     {
       "name": "max_retries 0 means a single attempt",
       "max_retries": 0,
       "wait_ms": 1000,
       "attempts": [{"throws": "e1"}, {"returns": "ok"}],
-      "expected": {"calls": 1, "throws": "e1"}
+      "expected": {"call_at_ms": [0], "throws": "e1"}
     },
     {
       "name": "max_retries 0 and success",
       "max_retries": 0,
       "wait_ms": 1000,
       "attempts": [{"returns": "ok"}],
-      "expected": {"calls": 1, "returns": "ok"}
+      "expected": {"call_at_ms": [0], "returns": "ok"}
     },
     {
       "name": "negative max_retries behaves like 0",
       "max_retries": -1,
       "wait_ms": 1000,
       "attempts": [{"throws": "e1"}, {"returns": "ok"}],
-      "expected": {"calls": 1, "throws": "e1"}
+      "expected": {"call_at_ms": [0], "throws": "e1"}
+    },
+    {
+      "name": "the wait between attempts is wait_ms",
+      "max_retries": 3,
+      "wait_ms": 250,
+      "attempts": [{"throws": "e1"}, {"throws": "e2"}, {"returns": "ok"}],
+      "expected": {"call_at_ms": [0, 250, 500], "returns": "ok"}
     },
     {
       "name": "max_retries 1: two calls, last error wins",
       "max_retries": 1,
       "wait_ms": 1000,
       "attempts": [{"throws": "e1"}, {"throws": "e2"}],
-      "expected": {"calls": 2, "throws": "e2"}
+      "expected": {"call_at_ms": [0, 1000], "throws": "e2"}
     },
     {
       "name": "index page settings: 10 retries are 11 calls",
@@ -625,7 +632,7 @@
         {"throws": "e11"},
         {"returns": "too late"}
       ],
-      "expected": {"calls": 11, "throws": "e11"}
+      "expected": {"call_at_ms": [0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000], "throws": "e11"}
     },
     {
       "name": "succeeds on the 11th call with 10 retries",
@@ -644,7 +651,7 @@
         {"throws": "e10"},
         {"returns": "ok"}
       ],
-      "expected": {"calls": 11, "returns": "ok"}
+      "expected": {"call_at_ms": [0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000], "returns": "ok"}
     }
   ],
   "objectEntries": [

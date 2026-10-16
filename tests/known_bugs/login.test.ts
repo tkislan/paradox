@@ -1,52 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { loadKnownBugSpec, settle, useFakeClock, waitFor, withTitle } from '../support.ts';
-import {
-  FLOW_PATHS, expectRequestCounts, expectScenario, outcomeOf, runLoginScenario, startBridge,
-} from '../helpers/login.ts';
+import { FLOW_PATHS, expectRequestCounts, startBridge } from '../helpers/login.ts';
 import { KnownBugLoginCasesSpec } from '../spec/schemas.ts';
 
 const spec = loadKnownBugSpec('login_cases', KnownBugLoginCasesSpec);
-
-describe('login()', () => {
-  it.each(withTitle(spec.login))('$title', runLoginScenario);
-
-  it('KNOWN BUG KB-11: a wrong password is reported with the session value message and leaves no session', async () => {
-    const { panel, login } = await startBridge({ env: { PASSWORD: 'not the password' } });
-
-    const outcome = await outcomeOf(login());
-
-    expect(outcome.error?.message).toBe('Session value not found in login page');
-    expect(panel.loggedIn).toBe(false);
-    expectRequestCounts(panel, { '/logout.html': 1, '/login_page.html': 1, '/default.html': 1, '/index.html': 0 });
-  });
-
-  it('KNOWN BUG KB-3: a login that fails after the credentials were accepted leaves the panel session open', async () => {
-    const { panel, login } = await startBridge({
-      responses: { '/index.html': { body: '<html><head></head><body>nothing here</body></html>' } },
-    });
-
-    const outcome = await outcomeOf(login());
-
-    expect(outcome.error?.message).toBe("Regex didn't match the value");
-    expect(panel.loggedIn).toBe(true);
-    expect(panel.requestsTo('/logout.html')).toHaveLength(1);
-  });
-});
-
-describe('login() index page retry', () => {
-  it.each(withTitle(spec.index_retry))('$title', async (row) => {
-    useFakeClock();
-    const bridge = await startBridge({ responses: row.panel });
-
-    await expectScenario(row, bridge);
-  });
-});
 
 describe('login() against a panel that stops answering', () => {
   it.each(withTitle(spec.hangs))('$title', async (row) => {
     const { panel, login } = await startBridge({ responses: { [row.hang]: { hang: true } } });
     let state = 'pending';
-    const settled = login().then(() => { state = 'resolved'; }, () => { state = 'rejected'; });
+    login().then(() => { state = 'resolved'; }, () => { state = 'rejected'; });
 
     await waitFor(() => panel.requestsTo(row.hang).length === 1, { message: `a request to ${row.hang}` });
     await settle(100);
@@ -54,8 +17,13 @@ describe('login() against a panel that stops answering', () => {
     expect(state).toBe('pending');
     expectRequestCounts(panel, Object.fromEntries(FLOW_PATHS.map((p) => [p, row.expected.request_counts[p] ?? 0])));
 
+    // Once the connection drops, a failed index page request is retried 1000 ms apart like any other failure.
+    const clock = useFakeClock();
     await panel.stop();
-    await settled;
+    await waitFor(async () => {
+      await clock.advance(1000);
+      return state !== 'pending';
+    }, { message: 'login() to end once the connection drops' });
     expect(state).toBe('rejected');
   });
 });

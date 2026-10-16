@@ -94,6 +94,8 @@ export type FakePanelOptions = {
   sessionValue?: string;
   /** The u/p query values accepted per session value; with none configured every login is rejected. */
   credentials?: { [sessionValue: string]: { u: string; p: string } };
+  /** The page answered to accepted credentials; the captured default page when omitted. */
+  defaultPage?: string;
   /** [area bitmask, name] pairs of the index page. */
   zones?: Zone[];
   /** Per-zone status codes (32 entries). */
@@ -107,6 +109,7 @@ export type FakePanelOptions = {
 export class FakePanel {
   sessionValue: string;
   credentials: NonNullable<FakePanelOptions['credentials']>;
+  defaultPage: string;
   zones: Zone[];
   statuszone: number[];
   useraccess: number[];
@@ -122,6 +125,7 @@ export class FakePanel {
   constructor({
     sessionValue = '91AC25D06A0C26BA',
     credentials = {},
+    defaultPage = TEMPLATES.default,
     zones = DEFAULT_ZONES,
     statuszone = new Array(ZONE_SLOTS).fill(0),
     useraccess = [DISARMED, 0],
@@ -129,6 +133,7 @@ export class FakePanel {
   }: FakePanelOptions = {}) {
     this.sessionValue = sessionValue;
     this.credentials = credentials;
+    this.defaultPage = defaultPage;
     this.zones = zones;
     this.statuszone = statuszone;
     this.useraccess = useraccess;
@@ -200,7 +205,7 @@ export class FakePanel {
         const expected = this.credentials[this.sessionValue];
         const ok = expected && request.query.u === expected.u && request.query.p === expected.p;
         this.loggedIn = Boolean(ok);
-        return html(ok ? TEMPLATES.default : renderLoginPage(this.sessionValue));
+        return html(ok ? this.defaultPage : renderLoginPage(this.sessionValue));
       }
 
       case '/index.html':

@@ -77,7 +77,7 @@ async function run() {
 
     return Promise.all([
       new Promise((resolve) => server.close(resolve)),
-      logout,
+      logout(),
     ]);
   }
 

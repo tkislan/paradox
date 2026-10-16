@@ -74,6 +74,7 @@ async function retry(maxRetryCount, waitTime, f, ...args) {
     } catch (error) {
       if (retryCount >= maxRetryCount) throw error;
       retryCount += 1;
+      await sleep(waitTime);
     }
   }
 }

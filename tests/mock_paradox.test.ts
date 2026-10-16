@@ -24,6 +24,15 @@ describe('FakePanel', () => {
     expect(panel.loggedIn).toBe(true);
   });
 
+  it('answers accepted credentials with the configured default page and opens the session', async () => {
+    const panel = await new FakePanel({ sessionValue: 'S1', credentials: { S1: { u: 'AA', p: 'BB' } }, defaultPage: '<p>custom</p>' }).start();
+
+    const body = await (await get(panel, '/default.html?u=AA&p=BB')).text();
+
+    expect(body).toBe('<p>custom</p>');
+    expect(panel.loggedIn).toBe(true);
+  });
+
   it('serves the configured zones in the index page and pads them to 32 slots', async () => {
     const panel = await new FakePanel({ zones: [[1, 'Door'], [0, ' ']] }).start();
 

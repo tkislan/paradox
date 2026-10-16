@@ -8,7 +8,7 @@ const { keeplowbyte, hex_md5, rc4 } = require('../paradox');
 const { sleep, getJsValue, iterateTuples, retry } = require('../util');
 
 const LOGIN_SESSION_VALUE_RE = /loginaff\("([\w]+)"/m;
-const PAGE_TITLE_RE = /<head>.*<title>(.*)<\/title>.*<\/head>/m;
+const PAGE_TITLE_RE = /<title>([^<]*)<\/title>/i;
 const ZONES_VALUE_RE = /tbl_zone[ ]+=[ ]+(new Array\((?:\d+,"(?:[^"\\]|\\.)*",?)*\))/m;
 
 const MAX_INDEX_PAGE_RETRY = 10;
@@ -70,13 +70,19 @@ function getSessionValue(loginPage) {
 
 async function createSession(username, password) {
   const params = { u: username, p: password };
-  const response = await axios({ url: `http://${HOSTNAME}/default.html`, params, headers });
-  return response.data;
+  try {
+    const response = await axios({ url: `http://${HOSTNAME}/default.html`, params, headers });
+    return response.data;
+  } catch (error) {
+    // An axios error carries the request and its query string: the hashed credentials, which together with the
+    // logged session value allow an offline guess of the short panel code.
+    throw new Error(/** @type {Error} */ (error).message);
+  }
 }
 
 function getTitle(defaultPage) {
   const match = PAGE_TITLE_RE.exec(defaultPage);
-  if (!match) throw Error('Session value not found in login page');
+  if (!match) throw Error('Title not found in default page');
   return match[1];
 }
 
@@ -98,13 +104,19 @@ async function login() {
 
   if (defaultPageTitle !== 'Paradox IP Module') throw new Error('Login failed');
 
-  const indexPage = await retry(MAX_INDEX_PAGE_RETRY, INDEX_PAGE_RETRY_WAIT_TIME, getIndexPage);
-  const zones = getJsValue(indexPage, ZONES_VALUE_RE);
-  const zoneTuples = Array.from(iterateTuples(zones));
+  try {
+    const indexPage = await retry(MAX_INDEX_PAGE_RETRY, INDEX_PAGE_RETRY_WAIT_TIME, getIndexPage);
+    const zones = getJsValue(indexPage, ZONES_VALUE_RE);
+    const zoneTuples = Array.from(iterateTuples(zones));
 
-  return {
-    zoneTuples,
-  };
+    return {
+      zoneTuples,
+    };
+  } catch (error) {
+    // The panel serves one session at a time: an open one locks out every other client until it times out.
+    await logout().catch(() => console.warn('Logout after failed login failed'));
+    throw error;
+  }
 }
 
 async function logout() {

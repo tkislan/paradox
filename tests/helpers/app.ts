@@ -79,6 +79,7 @@ export async function createBridge({ panel: panelSpec = {}, broker: brokerSpec =
   const panel = new FakePanel({
     sessionValue: login.session,
     credentials: panelSpec.accept_login === false ? {} : { [login.session]: { u: login.u, p: login.p } },
+    defaultPage: panelSpec.default_page === undefined ? undefined : specText(panelSpec.default_page),
     requireLogin: true,
     zones: panelSpec.zones,
     statuszone: panelSpec.statuszone,
@@ -164,6 +165,7 @@ async function perform(world: World, step: Step) {
     await world.broker.publish(topic, payload);
   }
   if (step.advance_ms) await world.clock.advance(step.advance_ms);
+  if (step.ready) await world.awaitReady();
 }
 
 /**
