@@ -18,7 +18,10 @@ export function vector(name: string) {
 
 export const golden = vector('sample session, 4 digit code');
 
-export const SAMPLE_ZONES: Zone[] = [[1, 'Predsien'], [1, 'Lava izba'], [1, 'Prava izba'], [1, 'Spalna'], [1, 'Obyvacka'], [1, 'Chodba']];
+export const SAMPLE_ZONES: Zone[] = [
+  [1, 'Predsien'], [1, 'Lava izba'], [1, 'Prava izba'], [1, 'Spalna'], [1, 'Obyvacka'], [1, 'Chodba'],
+  ...Array<Zone>(26).fill([0, ' ']),
+];
 
 export const FLOW_PATHS = ['/logout.html', '/login_page.html', '/default.html', '/index.html'];
 

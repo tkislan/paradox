@@ -100,7 +100,7 @@ async function login() {
 
   const indexPage = await retry(MAX_INDEX_PAGE_RETRY, INDEX_PAGE_RETRY_WAIT_TIME, getIndexPage);
   const zones = getJsValue(indexPage, ZONES_VALUE_RE);
-  const zoneTuples = Array.from(iterateTuples(zones)).filter(([enabled]) => enabled === 1);
+  const zoneTuples = Array.from(iterateTuples(zones));
 
   return {
     zoneTuples,

@@ -79,18 +79,18 @@
       ]
     },
     {
-      "name": "codes 0 3 4 5 6 8 9 10 17 22 are all unknown and never publish",
+      "name": "codes 0, 11, 17 and 22 are unknown and never publish; the known codes between them publish only changes",
       "known_bug": "KB-4",
       "panel": {"useraccess": [0, 0]},
       "steps": [
         {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}},
-        {"advance_ms": 1000, "panel_status": {"useraccess": [3, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"]}},
-        {"advance_ms": 1000, "panel_status": {"useraccess": [4, 0]}, "expect": {"panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [11, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [4, 0]}, "expect": {"mqtt_published": [{"topic": "paradox/status/armed", "payload": "ON"}], "panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}},
         {"advance_ms": 1000, "panel_status": {"useraccess": [5, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"]}},
         {"advance_ms": 1000, "panel_status": {"useraccess": [6, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"]}},
-        {"advance_ms": 1000, "panel_status": {"useraccess": [8, 0]}, "expect": {"panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [8, 0]}, "expect": {"mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}], "panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}},
         {"advance_ms": 1000, "panel_status": {"useraccess": [9, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"]}},
-        {"advance_ms": 1000, "panel_status": {"useraccess": [10, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [10, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "ON"}]}},
         {"advance_ms": 1000, "panel_status": {"useraccess": [17, 0]}, "expect": {"panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}},
         {"advance_ms": 1000, "panel_status": {"useraccess": [22, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"]}}
       ]
@@ -122,56 +122,13 @@
   ],
   "sensors": [
     {
-      "name": "open codes 2, 4 and 6 read as closed",
-      "known_bug": "KB-21",
-      "note": "Per the panel script notes in README.md (unverified on a real panel) 2 means \"in alarm\", 4 \"open+trouble\" and 6 \"open+memory\", but only code 1 counts as open, so the three open sensors publish OFF.",
-      "steps": [
-        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}},
-        {"advance_ms": 1000, "panel_status": {"statuszone": [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/sensor/0", "payload": "ON"}, {"topic": "paradox/sensor/1", "payload": "ON"}, {"topic": "paradox/sensor/2", "payload": "ON"}]}},
-        {"advance_ms": 1000, "panel_status": {"statuszone": [2, 4, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"mqtt_published": [{"topic": "paradox/sensor/0", "payload": "OFF"}, {"topic": "paradox/sensor/1", "payload": "OFF"}, {"topic": "paradox/sensor/2", "payload": "OFF"}], "panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}}
-      ]
-    },
-    {
-      "name": "closed sensors at startup publish nothing, whatever their code",
+      "name": "a closed sensor at startup publishes nothing, whatever its code; the open one publishes ON",
       "known_bug": "KB-4",
-      "note": "The captured unarmed page has codes 5 and 6 on two zones; they start 'closed' like everything else.",
+      "note": "As on the captured unarmed page: zone 0 is 5 (closed+memory) and starts 'closed' like everything else, zone 5 is 6 (open+memory).",
       "panel": {"statuszone": [5, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "useraccess": [1, 0]},
       "steps": [
-        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}},
-        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "broker_retained": {"paradox/sensor/0": null, "paradox/sensor/5": null}}}
-      ]
-    },
-    {
-      "name": "a disabled zone in front shifts every sensor onto the status entry of the position before it",
-      "known_bug": "KB-2",
-      "note": "Enabled zones are re-indexed after filtering: sensor/<position> reads statuszone[position], so the status of the disabled zone 0 is published as sensor/0 and the real zone 2 (Window) is never seen.",
-      "panel": {"zones": [[0, " "], [1, "Door"], [1, "Window"]]},
-      "steps": [
-        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}},
-        {"advance_ms": 1000, "panel_status": {"statuszone": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/sensor/0", "payload": "ON"}]}},
-        {"advance_ms": 1000, "panel_status": {"statuszone": [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"mqtt_published": [{"topic": "paradox/sensor/0", "payload": "OFF"}, {"topic": "paradox/sensor/1", "payload": "ON"}], "panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}},
-        {"advance_ms": 1000, "panel_status": {"statuszone": [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/sensor/1", "payload": "OFF"}]}}
-      ]
-    },
-    {
-      "name": "a disabled zone between enabled ones: the last enabled zone is read from the wrong entry",
-      "known_bug": "KB-2",
-      "panel": {"zones": [[1, "A"], [0, " "], [1, "B"]]},
-      "steps": [
-        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}},
-        {"advance_ms": 1000, "panel_status": {"statuszone": [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"]}},
-        {"advance_ms": 1000, "panel_status": {"statuszone": [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"mqtt_published": [{"topic": "paradox/sensor/1", "payload": "ON"}], "panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}}
-      ]
-    },
-    {
-      "name": "a zone flagged for area 2 or for both areas is not monitored, so sensors are numbered over the area 1 zones alone",
-      "known_bug": "KB-18",
-      "note": "The first number of a tbl_zone pair is an area bitmask (tests/README.md) and the bridge keeps only pairs equal to 1. Two of these four zones qualify, so only sensor/0 and sensor/1 exist, reading statuszone[0] and statuszone[1].",
-      "panel": {"zones": [[2, "Area two"], [1, "One"], [3, "Both"], [1, "Two"]]},
-      "steps": [
-        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}},
-        {"advance_ms": 1000, "panel_status": {"statuszone": [0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"panel_requests": ["GET /statuslive.html"]}},
-        {"advance_ms": 1000, "panel_status": {"statuszone": [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "expect": {"mqtt_published": [{"topic": "paradox/sensor/1", "payload": "ON"}], "panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}}
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}, {"topic": "paradox/sensor/5", "payload": "ON"}]}},
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "broker_retained": {"paradox/sensor/0": null, "paradox/sensor/5": "ON"}}}
       ]
     }
   ],

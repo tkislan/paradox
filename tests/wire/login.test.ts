@@ -6,7 +6,7 @@ import {
 } from '../helpers/login.ts';
 
 describe('login()', () => {
-  it('logs in with the encrypted credentials and returns the enabled zones', async () => {
+  it('logs in with the encrypted credentials and returns every zone slot', async () => {
     const { panel, output, login } = await startBridge();
 
     const result = await login();
@@ -90,16 +90,14 @@ describe('login()', () => {
     expect(outcome.error?.name).toBe('SyntaxError');
   });
 
-  it('a zone with a two-digit flag does not make login fail', async () => {
+  it('a zone with a two-digit flag is returned along with the others', async () => {
     const { login } = await startBridge({
       responses: { '/index.html': { body: '<html><script>tbl_zone = new Array(16,"Area five",1,"One");</script></html>' } },
     });
 
     const outcome = await outcomeOf(login());
 
-    expect(outcome.error).toBeUndefined();
-    // Whether the flag-16 zone is kept as well is KB-18, so only the area-1 zone is asserted.
-    expect(outcome.value.zoneTuples).toContainEqual([1, 'One']);
+    expect(outcome).toEqual({ value: { zoneTuples: [[16, 'Area five'], [1, 'One']] } });
   });
 
   it('rejects with the connection error when the panel is down, after a warning for the logout', async () => {

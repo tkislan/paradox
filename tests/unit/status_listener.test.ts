@@ -1,16 +1,19 @@
 import { EventEmitter } from 'node:events';
+import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import { loadSpec, settle, waitFor, withTitle } from '../support.ts';
 import { holdNextResponse, injectFailure } from '../helpers/panel_faults.ts';
 import {
-  POLL, POLL_LINE, ZONES, boot, captureIntervals, expectPollEvents, startListener,
+  POLL, POLL_LINE, ZONES, boot, bootLoggedIn, captureIntervals, expectPollEvents, startListener,
 } from '../helpers/status_listener.ts';
 import { StatusMachineSpec } from '../spec/schemas.ts';
+
+const require = createRequire(import.meta.url);
 
 const spec = loadSpec('status_machine', StatusMachineSpec);
 
 describe('poll scenarios (spec/status_machine.json)', () => {
-  const groups = ['first_poll', 'armed_codes', 'sensor_codes', 'transitions', 'failures'] as const;
+  const groups = ['first_poll', 'armed_codes', 'sensor_codes', 'transitions', 'zone_indexing', 'failures'] as const;
 
   describe.each(groups)('%s', (group) => {
     it.each(withTitle(spec[group]))('$title', expectPollEvents);
@@ -201,5 +204,22 @@ describe('stop()', () => {
     expect(panel.requestsTo(POLL)).toHaveLength(3);
     expect(first.events).toEqual([['armedChanged', false]]);
     expect(second.events).toEqual([['armedChanged', false], ['sensorChanged', '0', true]]);
+  });
+});
+
+describe('with the real login()', () => {
+  it('a zone after an unused slot is the sensor of its own slot and reads its own status', async () => {
+    const { panel, watch, tick } = await bootLoggedIn({ zones: [[1, 'Door'], [0, ' '], [1, 'Hall']] });
+    const { zoneTuples } = await require('../../src/api/login.js').login();
+    expect(zoneTuples).toEqual([[1, 'Door'], [0, ' '], [1, 'Hall'], ...Array(29).fill([0, ' '])]);
+    const { events } = watch(zoneTuples);
+
+    panel.setStatus({ statuszone: [0, 0, 1, ...Array(29).fill(0)], useraccess: [1, 0] });
+    await tick();
+    expect(events).toEqual([['armedChanged', false], ['sensorChanged', '2', true]]);
+
+    panel.setStatus({ statuszone: [0, 1, 0, ...Array(29).fill(0)] });
+    await tick();
+    expect(events).toEqual([['armedChanged', false], ['sensorChanged', '2', true], ['sensorChanged', '2', false]]);
   });
 });

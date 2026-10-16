@@ -25,19 +25,11 @@
       "known_bug": "KB-4"
     },
     {
-      "name": "codes other than 1 on the first poll are closed: nothing is emitted",
+      "name": "a closed+memory zone (5) on the first poll emits nothing, only the open codes 2 and 6 do",
       "zones": [[1, "A"], [1, "B"], [1, "C"]],
       "polls": [{ "statuszone": [5, 2, 6], "useraccess": [0, 0] }],
-      "expected_events": [],
+      "expected_events": [["sensorChanged", "1", true], ["sensorChanged", "2", true]],
       "known_bug": "KB-4"
-    },
-    {
-      "name": "captured pages: unarmed, then armed",
-      "zones": [[1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"]],
-      "polls": [{ "page": { "file": "data/unarmed.html" } }, { "page": { "file": "data/armed.html" } }],
-      "expected_events": [["armedChanged", false], ["armedChanged", true]],
-      "known_bug": "KB-21",
-      "note": "Zone codes 5 and 6 of the captures are not \"open\", so no sensor ever fires."
     }
   ],
   "armed_codes": [
@@ -47,55 +39,7 @@
       "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [3, 0] }],
       "expected_events": [["armedChanged", true], ["armedChanged", null]],
       "known_bug": "KB-22",
-      "note": "Per the panel script notes in README.md (unverified on a real panel) 3 means \"in alarm\"; the bridge only maps 1, 2 and 7, so app.js just logs \"Unknown armed status\" and the retained armed topic keeps its old value."
-    },
-    {
-      "name": "code 4 after armed: unknown (null)",
-      "zones": [[1, "A"]],
-      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [4, 0] }],
-      "expected_events": [["armedChanged", true], ["armedChanged", null]],
-      "known_bug": "KB-22",
-      "note": "Per the panel script notes in README.md (unverified on a real panel) 4 means \"sleep\"; the bridge only maps 1, 2 and 7, so app.js just logs \"Unknown armed status\" and the retained armed topic keeps its old value."
-    },
-    {
-      "name": "code 5 after armed: unknown (null)",
-      "zones": [[1, "A"]],
-      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [5, 0] }],
-      "expected_events": [["armedChanged", true], ["armedChanged", null]],
-      "known_bug": "KB-22",
-      "note": "Per the panel script notes in README.md (unverified on a real panel) 5 means \"stay\"; the bridge only maps 1, 2 and 7, so app.js just logs \"Unknown armed status\" and the retained armed topic keeps its old value."
-    },
-    {
-      "name": "code 6 after armed: unknown (null)",
-      "zones": [[1, "A"]],
-      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [6, 0] }],
-      "expected_events": [["armedChanged", true], ["armedChanged", null]],
-      "known_bug": "KB-22",
-      "note": "Per the panel script notes in README.md (unverified on a real panel) 6 means \"entry delay\"; the bridge only maps 1, 2 and 7, so app.js just logs \"Unknown armed status\" and the retained armed topic keeps its old value."
-    },
-    {
-      "name": "code 8 after armed: unknown (null)",
-      "zones": [[1, "A"]],
-      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [8, 0] }],
-      "expected_events": [["armedChanged", true], ["armedChanged", null]],
-      "known_bug": "KB-22",
-      "note": "Per the panel script notes in README.md (unverified on a real panel) 8 means \"ready\"; the bridge only maps 1, 2 and 7, so app.js just logs \"Unknown armed status\" and the retained armed topic keeps its old value."
-    },
-    {
-      "name": "code 9 after armed: unknown (null)",
-      "zones": [[1, "A"]],
-      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [9, 0] }],
-      "expected_events": [["armedChanged", true], ["armedChanged", null]],
-      "known_bug": "KB-22",
-      "note": "Per the panel script notes in README.md (unverified on a real panel) 9 means \"not ready\"; the bridge only maps 1, 2 and 7, so app.js just logs \"Unknown armed status\" and the retained armed topic keeps its old value."
-    },
-    {
-      "name": "code 10 after armed: unknown (null)",
-      "zones": [[1, "A"]],
-      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [10, 0] }],
-      "expected_events": [["armedChanged", true], ["armedChanged", null]],
-      "known_bug": "KB-22",
-      "note": "Per the panel script notes in README.md (unverified on a real panel) 10 means \"instant\"; the bridge only maps 1, 2 and 7, so app.js just logs \"Unknown armed status\" and the retained armed topic keeps its old value."
+      "note": "Per the panel script notes in README.md (unverified on a real panel) 3 means \"in alarm\"; the bridge maps every other code from 1 to 10 but not this one, so app.js just logs \"Unknown armed status\", the retained armed topic keeps its old value and the alarm is never reported."
     },
     {
       "name": "area 2 armed while area 1 is disarmed: reported as disarmed",
@@ -130,56 +74,6 @@
       ],
       "expected_events": [["armedChanged", true]],
       "known_bug": "KB-18"
-    }
-  ],
-  "sensor_codes": [
-    {
-      "name": "code 2 after open: closed",
-      "zones": [[1, "A"], [1, "B"]],
-      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [2, 0], "useraccess": [0, 0] }],
-      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]],
-      "known_bug": "KB-21",
-      "note": "Per the panel script notes in README.md (unverified on a real panel) 2 means \"in alarm\" but only code 1 counts as open, so the sensor is announced as closed."
-    },
-    {
-      "name": "code 4 after open: closed",
-      "zones": [[1, "A"], [1, "B"]],
-      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [4, 0], "useraccess": [0, 0] }],
-      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]],
-      "known_bug": "KB-21",
-      "note": "Per the panel script notes in README.md (unverified on a real panel) 4 means \"open+trouble\" but only code 1 counts as open, so the sensor is announced as closed."
-    },
-    {
-      "name": "code 6 after open: closed",
-      "zones": [[1, "A"], [1, "B"]],
-      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [6, 0], "useraccess": [0, 0] }],
-      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]],
-      "known_bug": "KB-21",
-      "note": "Per the panel script notes in README.md (unverified on a real panel) 6 means \"open+memory\" but only code 1 counts as open, so the sensor is announced as closed."
-    }
-  ],
-  "zone_indexing": [
-    {
-      "name": "real zones 0 and 2 enabled, zone 1 disabled: the real zone 2 (the Hall) opens in slot 2 and nothing is seen",
-      "zones": [[1, "Door"], [1, "Hall"]],
-      "polls": [{ "statuszone": [0, 0, 1], "useraccess": [0, 0] }],
-      "expected_events": [],
-      "known_bug": "KB-2",
-      "note": "login() drops the disabled zone and hands over two tuples; sensor 1 (\"Hall\") then reads statuszone[1], not statuszone[2]."
-    },
-    {
-      "name": "real zones 0 and 2 enabled, zone 1 disabled: slot 1 (the disabled zone) shows open and is reported as sensor 1, the Hall",
-      "zones": [[1, "Door"], [1, "Hall"]],
-      "polls": [{ "statuszone": [0, 1, 0], "useraccess": [0, 0] }],
-      "expected_events": [["sensorChanged", "1", true]],
-      "known_bug": "KB-2"
-    },
-    {
-      "name": "real zones 0 and 2 enabled, zone 1 disabled: the first zone is unaffected because no disabled zone precedes it",
-      "zones": [[1, "Door"], [1, "Hall"]],
-      "polls": [{ "statuszone": [1, 0, 0], "useraccess": [0, 0] }],
-      "expected_events": [["sensorChanged", "0", true]],
-      "known_bug": "KB-2"
     }
   ],
   "failures": [

@@ -2,27 +2,6 @@
   "_comment": "Rows of ../login_cases.json that pin a defect of the current code on purpose (known_bug: the catalog id in tests/README.md), moved here unchanged: the same groups and the same row format, which the comment of that file describes. A port does not have to reproduce any of them.",
   "login": [
     {
-      "name": "the result carries no slot numbers, so a disabled slot in front of an enabled one shifts its position",
-      "panel": { "/index.html": { "zones": [[0, " "], [1, "Door"]] } },
-      "expected": { "zoneTuples": [[1, "Door"]] },
-      "known_bug": "KB-2",
-      "note": "Door is slot 1 (0-based) on the panel but index 0 of the returned list; status_listener reads statuszone by that list position."
-    },
-    {
-      "name": "a zone assigned to both areas (flag 3) is dropped",
-      "panel": { "/index.html": { "zones": [[3, "Both"], [1, "Area one"], [2, "Area two"]] } },
-      "expected": { "zoneTuples": [[1, "Area one"]] },
-      "known_bug": "KB-18",
-      "note": "tests/README.md: the first number of a tbl_zone pair is an area bitmask, not an enabled flag, so 3 means areas 1 and 2. The bridge keeps only pairs equal to 1."
-    },
-    {
-      "name": "a zone with a two-digit flag (16, area 5) is dropped and the others are kept",
-      "panel": { "/index.html": { "body": "<html><script>tbl_zone = new Array(16,\"Area five\",1,\"One\");</script></html>" } },
-      "expected": { "zoneTuples": [[1, "One"]] },
-      "known_bug": "KB-18",
-      "note": "tests/README.md: the first number of a tbl_zone pair is an area bitmask, so 16 means area 5. Flags of any length are read, but only pairs equal to 1 are kept."
-    },
-    {
       "name": "wrong credentials answered with the real multi-line login page fail with the session value message",
       "panel": { "/default.html": { "file": "data/login_page.html" } },
       "expected": { "error": "Session value not found in login page", "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1 } },
@@ -83,7 +62,12 @@
       "name": "the index page is requested again right after one failure",
       "panel": { "/index.html": { "status": 500, "times": 1 } },
       "expected": {
-        "zoneTuples": [[1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"]],
+        "zoneTuples": [
+          [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ],
         "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1, "/index.html": 2 }
       },
       "known_bug": "KB-5",
@@ -93,7 +77,12 @@
       "name": "three failures are retried back to back",
       "panel": { "/index.html": { "status": 404, "times": 3 } },
       "expected": {
-        "zoneTuples": [[1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"]],
+        "zoneTuples": [
+          [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ],
         "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1, "/index.html": 4 }
       },
       "known_bug": "KB-5"
@@ -102,7 +91,12 @@
       "name": "reset connections are retried like HTTP errors",
       "panel": { "/index.html": { "destroy": true, "times": 2 } },
       "expected": {
-        "zoneTuples": [[1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"]],
+        "zoneTuples": [
+          [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ],
         "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1, "/index.html": 3 }
       },
       "known_bug": "KB-5"
@@ -111,7 +105,12 @@
       "name": "ten failures still succeed on the eleventh attempt",
       "panel": { "/index.html": { "status": 500, "times": 10 } },
       "expected": {
-        "zoneTuples": [[1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"]],
+        "zoneTuples": [
+          [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ],
         "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1, "/index.html": 11 }
       },
       "known_bug": "KB-5"

@@ -13,7 +13,7 @@ import { onCleanup } from './support.ts';
  *   GET /logout.html                       -> ends the session
  *   GET /login_page.html                   -> page containing loginaff("<session value>", ...)
  *   GET /default.html?u=<..>&p=<..>        -> "Paradox IP Module" page on success, the login page otherwise
- *   GET /index.html                        -> page containing tbl_zone = new Array(<enabled>,"<name>",...)
+ *   GET /index.html                        -> page containing tbl_zone = new Array(<area bitmask>,"<name>",...)
  *   GET /statuslive.html                   -> page containing tbl_statuszone / tbl_useraccess / tbl_alarmes
  *   GET /statuslive.html?area=00&value=r|d -> arm / disarm, then the status page
  *   GET /keep_alive.html?msgid=1           -> 200
@@ -35,7 +35,7 @@ const TEMPLATES = {
 };
 
 const ZONE_SLOTS = 32;
-export type Zone = [enabled: number, name: string];
+export type Zone = [areas: number, name: string];
 
 const DEFAULT_ZONES: Zone[] = [
   [1, 'Predsien'], [1, 'Lava izba'], [1, 'Prava izba'], [1, 'Spalna'], [1, 'Obyvacka'], [1, 'Chodba'],
@@ -56,7 +56,7 @@ export function renderLoginPage(sessionValue: string) {
 
 export function renderIndexPage(zones: Zone[]) {
   const slots = Array.from({ length: ZONE_SLOTS }, (_, i) => zones[i] || [0, ' ']);
-  const array = slots.map(([enabled, name]) => `${enabled},"${name}"`).join(',');
+  const array = slots.map(([areas, name]) => `${areas},"${name}"`).join(',');
   return swap(TEMPLATES.index, /tbl_zone = new Array\([^)]*\)/, `tbl_zone = new Array(${array})`);
 }
 
@@ -94,7 +94,7 @@ export type FakePanelOptions = {
   sessionValue?: string;
   /** The u/p query values accepted per session value; with none configured every login is rejected. */
   credentials?: { [sessionValue: string]: { u: string; p: string } };
-  /** [enabled, name] pairs of the index page. */
+  /** [area bitmask, name] pairs of the index page. */
   zones?: Zone[];
   /** Per-zone status codes (32 entries). */
   statuszone?: number[];

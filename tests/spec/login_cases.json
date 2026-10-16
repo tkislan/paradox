@@ -1,31 +1,91 @@
 {
-  "_comment": "Scenarios for src/api/login.js: login() is run against a fake panel and must resolve to expected.zoneTuples or reject with expected.error (exact message). Unless a row says otherwise the panel behaves like mock_paradox.ts with session value 91AC25D06A0C26BA, accepts the u/p of crypto.json 'sample session, 4 digit code' (username user, password 1234) and lists the six sample zones. 'panel' overrides the answer for one request path: a response or a list of responses used in order; each response is {file} (relative to tests/), {body}, {status[, headers][, body]} (200, no extra headers and an empty body when omitted), {zones} (the index page with these [enabled, name] slots, padded to 32 slots with [0, ' '] like the real panel), {zones_by_slot} (the same, sparse: slot index -> [enabled, name]), {destroy} (the connection is reset) or {hang} (never answered); 'times' limits how often a response is used (forever when omitted). 'expected.default_query' is the exact query string of the first /default.html request. 'expected.request_counts' is how often the panel was asked for each path (a path that is not listed was never asked; one request to each of /logout.html, /login_page.html, /default.html and /index.html when the whole object is omitted). 'expected.warnings' are the messages logged with console.warn (none when omitted). Error messages starting with 'Request failed' come from axios and 'socket hang up' / 'connect ECONNREFUSED' from Node's http client: a port only has to fail there. Rows that pin a defect on purpose (known_bug) are in known_bugs/login_cases.json, in the same groups.",
+  "_comment": "Scenarios for src/api/login.js: login() is run against a fake panel and must resolve to expected.zoneTuples or reject with expected.error (exact message). Unless a row says otherwise the panel behaves like mock_paradox.ts with session value 91AC25D06A0C26BA, accepts the u/p of crypto.json 'sample session, 4 digit code' (username user, password 1234) and lists the six sample zones. 'panel' overrides the answer for one request path: a response or a list of responses used in order; each response is {file} (relative to tests/), {body}, {status[, headers][, body]} (200, no extra headers and an empty body when omitted), {zones} (the index page with these [area bitmask, name] slots, padded to 32 slots with [0, ' '] like the real panel), {zones_by_slot} (the same, sparse: slot index -> [area bitmask, name]), {destroy} (the connection is reset) or {hang} (never answered); 'times' limits how often a response is used (forever when omitted). 'expected.default_query' is the exact query string of the first /default.html request. 'expected.request_counts' is how often the panel was asked for each path (a path that is not listed was never asked; one request to each of /logout.html, /login_page.html, /default.html and /index.html when the whole object is omitted). 'expected.warnings' are the messages logged with console.warn (none when omitted). Error messages starting with 'Request failed' come from axios and 'socket hang up' / 'connect ECONNREFUSED' from Node's http client: a port only has to fail there. Rows that pin a defect on purpose (known_bug) are in known_bugs/login_cases.json, in the same groups.",
 
   "login": [
     {
-      "name": "captured login, default and index pages of a real panel give the six enabled zones",
+      "name": "captured login, default and index pages of a real panel give all 32 slots, the six zones in use first",
       "panel": {
         "/login_page.html": { "file": "data/login_page.html" },
         "/default.html": { "file": "data/default_page.html" },
         "/index.html": { "file": "data/index_page.html" }
       },
-      "expected": { "zoneTuples": [[1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"]] }
+      "expected": {
+        "zoneTuples": [
+          [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
     },
 
     {
-      "name": "disabled slots are dropped and enabled names are kept exactly as given",
+      "name": "unused slots stay in place and names are kept exactly as given",
       "panel": { "/index.html": { "zones": [[1, "Door"], [0, "Hall"], [1, " Padded "], [1, " "], [0, "Cellar"]] } },
-      "expected": { "zoneTuples": [[1, "Door"], [1, " Padded "], [1, " "]] }
+      "expected": {
+        "zoneTuples": [
+          [1, "Door"], [0, "Hall"], [1, " Padded "], [1, " "], [0, "Cellar"], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
     },
     {
-      "name": "flag values other than 1 are dropped",
+      "name": "area bitmasks other than 1 (2, 9) are kept, like unused slots (0)",
       "panel": { "/index.html": { "zones": [[2, "Two"], [1, "One"], [9, "Nine"], [0, "Zero"]] } },
-      "expected": { "zoneTuples": [[1, "One"]] }
+      "expected": {
+        "zoneTuples": [
+          [2, "Two"], [1, "One"], [9, "Nine"], [0, "Zero"], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
     },
     {
-      "name": "no enabled zone gives an empty list",
+      "name": "an unused slot in front of a zone keeps its place, so the zone is returned at its panel slot",
+      "panel": { "/index.html": { "zones": [[0, " "], [1, "Door"]] } },
+      "expected": {
+        "zoneTuples": [
+          [0, " "], [1, "Door"], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      },
+      "note": "Door is slot 1 (0-based) of tbl_zone and of tbl_statuszone; status_listener keys its sensor by that position."
+    },
+    {
+      "name": "a zone assigned to both areas (flag 3) is kept like zones of either area",
+      "panel": { "/index.html": { "zones": [[3, "Both"], [1, "Area one"], [2, "Area two"]] } },
+      "expected": {
+        "zoneTuples": [
+          [3, "Both"], [1, "Area one"], [2, "Area two"], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      },
+      "note": "tests/README.md: the first number of a tbl_zone pair is an area bitmask, not an enabled flag, so 3 means areas 1 and 2."
+    },
+    {
+      "name": "a zone with a two-digit flag (16, area 5) is kept along with the others",
+      "panel": { "/index.html": { "body": "<html><script>tbl_zone = new Array(16,\"Area five\",1,\"One\");</script></html>" } },
+      "expected": { "zoneTuples": [[16, "Area five"], [1, "One"]] },
+      "note": "tests/README.md: the first number of a tbl_zone pair is an area bitmask, so 16 means area 5."
+    },
+    {
+      "name": "a panel with no zone in use gives 32 unused slots",
       "panel": { "/index.html": { "zones": [] } },
-      "expected": { "zoneTuples": [] }
+      "expected": {
+        "zoneTuples": [
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
     },
     {
       "name": "an empty tbl_zone array gives an empty list",
@@ -54,7 +114,7 @@
       "expected": { "zoneTuples": [[1, "A"], [1, "B"], [1, "C"], [1, "D"]] }
     },
     {
-      "name": "32 enabled zones yield all 32",
+      "name": "32 zones in use yield all 32",
       "panel": {
         "/index.html": {
           "zones": [
@@ -75,54 +135,124 @@
       }
     },
     {
-      "name": "an enabled zone in slot 15 (the 16th) is seen",
+      "name": "a zone in use in slot 15 (the 16th) is seen",
       "panel": { "/index.html": { "zones_by_slot": { "15": [1, "Sixteenth"] } } },
-      "expected": { "zoneTuples": [[1, "Sixteenth"]] }
+      "expected": {
+        "zoneTuples": [
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [1, "Sixteenth"],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
     },
     {
-      "name": "an enabled zone in slot 16 (the 17th) is seen",
+      "name": "a zone in use in slot 16 (the 17th) is seen",
       "panel": { "/index.html": { "zones_by_slot": { "14": [1, "Fifteenth"], "16": [1, "Seventeenth"] } } },
-      "expected": { "zoneTuples": [[1, "Fifteenth"], [1, "Seventeenth"]] }
+      "expected": {
+        "zoneTuples": [
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [1, "Fifteenth"], [0, " "],
+          [1, "Seventeenth"], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
     },
     {
       "name": "zone names of letters, digits, underscore and spaces are accepted",
       "panel": { "/index.html": { "zones": [[1, "Door_1"], [1, "Room 2"], [1, "UPPER lower 09"]] } },
-      "expected": { "zoneTuples": [[1, "Door_1"], [1, "Room 2"], [1, "UPPER lower 09"]] }
+      "expected": {
+        "zoneTuples": [
+          [1, "Door_1"], [1, "Room 2"], [1, "UPPER lower 09"], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
     },
     {
       "name": "an accented zone name is accepted",
       "panel": { "/index.html": { "zones": [[1, "Obývačka"]] } },
-      "expected": { "zoneTuples": [[1, "Obývačka"]] }
+      "expected": {
+        "zoneTuples": [
+          [1, "Obývačka"], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
     },
     {
-      "name": "an accented name on a disabled slot is dropped like any disabled slot",
+      "name": "an accented name on an unused slot is kept like any slot",
       "panel": { "/index.html": { "zones": [[1, "Door"], [0, "Pivnica č. 2"]] } },
-      "expected": { "zoneTuples": [[1, "Door"]] }
+      "expected": {
+        "zoneTuples": [
+          [1, "Door"], [0, "Pivnica č. 2"], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
     },
     {
       "name": "a hyphen in a zone name is accepted",
       "panel": { "/index.html": { "zones": [[1, "Pred-sien"]] } },
-      "expected": { "zoneTuples": [[1, "Pred-sien"]] }
+      "expected": {
+        "zoneTuples": [
+          [1, "Pred-sien"], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
     },
     {
       "name": "an apostrophe in a zone name is accepted",
       "panel": { "/index.html": { "zones": [[1, "Peter's room"]] } },
-      "expected": { "zoneTuples": [[1, "Peter's room"]] }
+      "expected": {
+        "zoneTuples": [
+          [1, "Peter's room"], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
     },
     {
       "name": "a dot in a zone name is accepted",
       "panel": { "/index.html": { "zones": [[1, "1.floor"]] } },
-      "expected": { "zoneTuples": [[1, "1.floor"]] }
+      "expected": {
+        "zoneTuples": [
+          [1, "1.floor"], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
     },
     {
       "name": "a comma in a zone name stays part of the name",
       "panel": { "/index.html": { "zones": [[1, "A,B"]] } },
-      "expected": { "zoneTuples": [[1, "A,B"]] }
+      "expected": {
+        "zoneTuples": [
+          [1, "A,B"], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
     },
     {
       "name": "parentheses in a zone name stay part of the name",
       "panel": { "/index.html": { "zones": [[1, "Hall (old)"], [1, "Door"]] } },
-      "expected": { "zoneTuples": [[1, "Hall (old)"], [1, "Door"]] }
+      "expected": {
+        "zoneTuples": [
+          [1, "Hall (old)"], [1, "Door"], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
     },
     {
       "name": "a double quote escaped with a backslash is part of the zone name",
@@ -130,14 +260,28 @@
       "expected": { "zoneTuples": [[1, "Say \"hi\""], [1, "Door"]] }
     },
     {
-      "name": "an empty name on an enabled zone is accepted",
+      "name": "an empty name on a zone in use is accepted",
       "panel": { "/index.html": { "zones": [[1, ""]] } },
-      "expected": { "zoneTuples": [[1, ""]] }
+      "expected": {
+        "zoneTuples": [
+          [1, ""], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
     },
     {
-      "name": "an empty name on a disabled slot is dropped like any disabled slot",
+      "name": "an empty name on an unused slot is kept like any slot",
       "panel": { "/index.html": { "zones": [[1, "Door"], [0, ""]] } },
-      "expected": { "zoneTuples": [[1, "Door"]] }
+      "expected": {
+        "zoneTuples": [
+          [1, "Door"], [0, ""], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
     },
     {
       "name": "an index page without tbl_zone makes login fail",
@@ -209,12 +353,26 @@
     {
       "name": "a one-line default page titled Paradox IP Module is a successful login",
       "panel": { "/default.html": { "body": "<html><head><title>Paradox IP Module</title></head><body></body></html>" } },
-      "expected": { "zoneTuples": [[1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"]] }
+      "expected": {
+        "zoneTuples": [
+          [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
     },
     {
       "name": "other head content after the title is accepted",
       "panel": { "/default.html": { "body": "<html><head><title>Paradox IP Module</title><script>var a;</script></head><body></body></html>" } },
-      "expected": { "zoneTuples": [[1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"]] }
+      "expected": {
+        "zoneTuples": [
+          [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
     },
     {
       "name": "a one-line default page with another title is a rejected login",
@@ -250,12 +408,26 @@
     {
       "name": "the session value is the first double-quoted loginaff argument",
       "panel": { "/login_page.html": { "body": "<html><script>loginaff(\"91AC25D06A0C26BA\",0);loginaff(\"0000000000000000\",0);</script></html>" } },
-      "expected": { "zoneTuples": [[1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"]] }
+      "expected": {
+        "zoneTuples": [
+          [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
     },
     {
       "name": "a single-quoted loginaff call in front is skipped",
       "panel": { "/login_page.html": { "body": "<html><script>loginaff('0000000000000000',0);loginaff(\"91AC25D06A0C26BA\",0);</script></html>" } },
-      "expected": { "zoneTuples": [[1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"]] }
+      "expected": {
+        "zoneTuples": [
+          [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ]
+      }
     },
     {
       "name": "a login page without loginaff has no session value",
@@ -299,7 +471,12 @@
         "/default.html": { "body": "<html><head><title>Paradox IP Module</title></head><body></body></html>" }
       },
       "expected": {
-        "zoneTuples": [[1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"]],
+        "zoneTuples": [
+          [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ],
         "default_query": "u=09457757&p=C09A8B076C803F924B6BC733AB3AE43B"
       },
       "note": "u and p are the independent spec/crypto_reference.py result for username user and password 1234; the panel override accepts any credentials."
@@ -311,7 +488,12 @@
         "/default.html": { "body": "<html><head><title>Paradox IP Module</title></head><body></body></html>" }
       },
       "expected": {
-        "zoneTuples": [[1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"]],
+        "zoneTuples": [
+          [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ],
         "default_query": "u=1A7AE573&p=879A30BC1CDD0EEA6FBB52215CF2C5D7"
       },
       "note": "u and p are the independent spec/crypto_reference.py result for username user and password 1234; the panel override accepts any credentials."
@@ -346,7 +528,12 @@
       "name": "a failing logout before login is only a warning",
       "panel": { "/logout.html": { "status": 500 } },
       "expected": {
-        "zoneTuples": [[1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"]],
+        "zoneTuples": [
+          [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ],
         "warnings": ["Logout before login failed"]
       }
     },
@@ -354,7 +541,12 @@
       "name": "a reset connection on the logout before login is only a warning",
       "panel": { "/logout.html": { "destroy": true } },
       "expected": {
-        "zoneTuples": [[1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"]],
+        "zoneTuples": [
+          [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ],
         "warnings": ["Logout before login failed"]
       }
     },
@@ -375,7 +567,12 @@
         "/default_moved.html": { "file": "data/default_page.html" }
       },
       "expected": {
-        "zoneTuples": [[1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"]],
+        "zoneTuples": [
+          [1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ],
         "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1, "/default_moved.html": 1, "/index.html": 1 }
       }
     },
@@ -386,7 +583,12 @@
         "/index_moved.html": { "zones": [[1, "Moved"]] }
       },
       "expected": {
-        "zoneTuples": [[1, "Moved"]],
+        "zoneTuples": [
+          [1, "Moved"], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "],
+          [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
+        ],
         "request_counts": { "/logout.html": 1, "/login_page.html": 1, "/default.html": 1, "/index.html": 1, "/index_moved.html": 1 }
       }
     }

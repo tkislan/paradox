@@ -8,7 +8,7 @@ import { z } from 'zod';
 const row = { name: z.string(), note: z.string().optional(), known_bug: z.string().optional() };
 const comment = { _comment: z.string() };
 
-/** [enabled, name] of a panel zone. */
+/** [area bitmask, name] of a tbl_zone slot; bitmask 0 is an unused slot. */
 const Zone = z.tuple([z.number(), z.string()]);
 
 /** Text given inline, or as {file} relative to tests/. */
@@ -177,6 +177,7 @@ export const StatusMachineSpec = z.strictObject({
   armed_codes: Timeline,
   sensor_codes: Timeline,
   transitions: Timeline,
+  zone_indexing: Timeline,
   failures: Timeline,
   status_poll_cadence: z.array(z.strictObject({ ...row, advance_ms: z.array(z.number()), expected_requests: z.array(z.number()) })),
 });
@@ -185,8 +186,6 @@ export const KnownBugStatusMachineSpec = z.strictObject({
   ...comment,
   first_poll: Timeline,
   armed_codes: Timeline,
-  sensor_codes: Timeline,
-  zone_indexing: Timeline,
   failures: Timeline,
 });
 

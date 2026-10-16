@@ -15,7 +15,7 @@ const require = createRequire(import.meta.url);
 const spec = loadKnownBugSpec('status_machine', KnownBugStatusMachineSpec);
 
 describe('poll scenarios (spec/known_bugs/status_machine.json)', () => {
-  const groups = ['first_poll', 'armed_codes', 'sensor_codes', 'zone_indexing', 'failures'] as const;
+  const groups = ['first_poll', 'armed_codes', 'failures'] as const;
 
   describe.each(groups)('%s', (group) => {
     it.each(withTitle(spec[group]))('$title', expectPollEvents);
@@ -30,13 +30,13 @@ describe('statusListener()', () => {
     const { statusListener } = require('../../src/status_listener.js');
     const emit = vi.spyOn(EventEmitter.prototype, 'emit');
 
-    statusListener([[1, 'A'], [1, 'B']]);
+    statusListener([[1, 'A'], [0, ' '], [1, 'B']]);
 
     const startup = emit.mock.calls.filter(([name]) => name === 'armedChanged' || name === 'sensorChanged');
     expect(startup).toEqual([
       ['armedChanged', null],
       ['sensorChanged', '0', false],
-      ['sensorChanged', '1', false],
+      ['sensorChanged', '2', false],
     ]);
   });
 });
@@ -167,22 +167,5 @@ describe('exceptions inside a poll', () => {
       ['armedChanged', true], ['sensorChanged', '0', true],
       ['armedChanged', true], ['sensorChanged', '0', true], ['sensorChanged', '1', true],
     ]);
-  });
-});
-
-describe('with the real login()', () => {
-  it('KNOWN BUG KB-2: a disabled zone before an enabled one shifts which status slot a sensor reads', async () => {
-    const { panel, watch, tick } = await bootLoggedIn({ zones: [[1, 'Door'], [0, ' '], [1, 'Hall']] });
-    const { zoneTuples } = await require('../../src/api/login.js').login();
-    expect(zoneTuples).toEqual([[1, 'Door'], [1, 'Hall']]);
-    const { events } = watch(zoneTuples);
-
-    panel.setStatus({ statuszone: [0, 0, 1, ...Array(29).fill(0)], useraccess: [1, 0] });
-    await tick();
-    expect(events).toEqual([['armedChanged', false]]);
-
-    panel.setStatus({ statuszone: [0, 1, 0, ...Array(29).fill(0)] });
-    await tick();
-    expect(events).toEqual([['armedChanged', false], ['sensorChanged', '1', true]]);
   });
 });

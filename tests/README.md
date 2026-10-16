@@ -25,7 +25,7 @@ The tests are TypeScript that vitest runs as is (it strips the types, nothing is
 checks them together with `src/`, with the same settings: `strict`, but unannotated parameters allowed (`any`).
 `tests/package.json` marks them as ES modules, which they are under vitest.
 
-About 630 tests, 10 s. `npx vitest run --exclude 'tests/known_bugs/**'` skips the 122 that pin a defect. In agent/CI
+About 640 tests, 10 s. `npx vitest run --exclude 'tests/known_bugs/**'` skips the 101 that pin a defect. In agent/CI
 environments vitest may pick a reporter that hides console output; use `npx vitest run --reporter=default` to see
 whether a change made the suite noisy (it must stay silent).
 
@@ -38,8 +38,8 @@ versions production installs.
 
 ## Coverage
 
-94.7 % of lines, 95.7 % of branches. Dead code in `src/` is not covered: the `default:` case of the sensor handler
-(`app.js:43`, the value is always a boolean) and `initSensorStatus` (`status_listener.js:32-34`, never called).
+94.7 % of lines, 96.3 % of branches. Dead code in `src/` is not covered: the `default:` case of the sensor handler
+(`app.js:43`, the value is always a boolean) and `initSensorStatus` (`status_listener.js:48-50`, never called).
 Deliberately without a test, because a Home Assistant integration has nothing like them: the REST API (`app.js`),
 signal handling and shutdown (`signal.js`), the missing-variable check (`config.js`), MQTT connection failures
 (`mqtt_link.js`) and the `playground.js` script. `config.js`, `mqtt_link.js`, `keep_alive_worker.js` and `signal.js`
@@ -144,14 +144,13 @@ git restore src/util.js
 
 Each row is pinned by tests titled `KNOWN BUG KB-n: ...` (files in `known_bugs/`, named like the test file they
 were split from) and by spec rows with `"known_bug": "KB-n"` (files in `spec/known_bugs/`). "Port" is a suggestion,
-not something the tests assert. The ids are not renumbered: KB-1, 10, 23, 39 and 40 are missing because they are
-fixed, and KB-7, 8, 17, 19, 20, 24 to 26, 29 to 34, 37, 38 and 41 to 43 because the tests that pinned them were
+not something the tests assert. The ids are not renumbered: KB-1, 2, 10, 21, 23, 39 and 40 are missing because they
+are fixed, and KB-7, 8, 17, 19, 20, 24 to 26, 29 to 34, 37, 38 and 41 to 43 because the tests that pinned them were
 removed: those of `config.js`, `mqtt_link.js` and `signal.js`, the child-process tests, and the MQTT connection, REST
 API, shutdown and configuration scenarios.
 
 | ID | What the code does today | Pinned in | Port |
 | --- | --- | --- | --- |
-| KB-2 | Sensors are identified by their position in the *filtered* zone list; the enabled flags decide how many sensors exist, never which ones. `paradox/sensor/<position>` therefore reads `statuszone[position]` | `status_machine.json`, `system_scenarios.json` | key by real zone number |
 | KB-3 | Never logs out: the shutdown handler returns the `logout` function without calling it, and no failure path logs out either. Only the next start's best-effort logout frees the (single) panel session | `login.test.ts` | log out on unload |
 | KB-4 | Startup events are emitted before anyone can listen. Initial state is assumed (armed unknown, all sensors closed), so only *differences* are published after a start: closed sensors publish nothing and retained topics keep stale values | `status_machine.json`, `system_scenarios.json` | publish the full state at start |
 | KB-5 | `retry` ignores its wait time: the index page is requested up to 11 times back to back. Only failed requests are retried, not a 200 that does not parse | `util.json`, `login_cases.json` | back off |
@@ -163,9 +162,8 @@ API, shutdown and configuration scenarios.
 | KB-14 | `arm`/`disarm` ignore the response: any 2xx (including the login page after expiry) is success | `status_pages.json`, `alarm.test.ts` | verify the state change |
 | KB-15 | Alarm and trouble tables are never parsed (`alarms` is always `[0]`) | `status_pages.json` | parse them |
 | KB-16 | Any payload on `paradox/command/arm|disarm` triggers the command | `system_scenarios.json` | validate payload |
-| KB-18 | Only area 1 exists: `useraccess[0]`, command `area=00`, and the `tbl_zone` flag (really an area bitmask, see below) is compared with `== 1`, dropping zones of any other area or of several | `login_cases.json`, `status_machine.json` | all areas |
-| KB-21 | Only zone code `1` is "open"; `4` (open+trouble), `6` (open+memory, zone 5 of the captured `unarmed.html`) and `2` (alarm) read as closed | `status_machine.json`, `system_scenarios.json` | map all codes |
-| KB-22 | Only `useraccess` 1, 2, 7 are mapped (7 = exit delay counts as armed); stay, sleep, in alarm, entry delay, ready, ... become "unknown" and publish nothing, so an alarm is never reported | `status_machine.json` | map all codes |
+| KB-18 | The armed state and the commands cover area 1 only: the armed state is read from `useraccess[0]` alone (`parseInt` of the whole table) and commands always send `area=00` | `status_machine.json`, `status_pages.json`, `system_scenarios.json` | all areas |
+| KB-22 | `useraccess` 3 (in alarm) is "unknown" like an unused area and publishes nothing, so an alarm is never reported | `status_machine.json` | report the alarm |
 | KB-27 | An error in the poll callback (no `'error'` listener, after `stop()`, or a throwing listener) is an unhandled promise rejection | `status_listener.test.ts` | - |
 | KB-28 | The keep-alive ignores its response, like `arm` | `status_pages.json`, `status.test.ts` | - |
 | KB-35 | A failed login logs the whole axios error, including the hashed credentials | `app.test.ts` | redact |
@@ -181,12 +179,16 @@ Read from the panel's own JavaScript (`commun.js`, `langue.js`, `agaxreq.js` as 
 tracstarr/ParadoxAlarmControl) while researching this suite; not verified against your panel. Re-capture
 before trusting them for the port.
 
-- `tbl_statuszone`: 0 closed, 1 open, 2 in alarm, 3 closed+trouble, 4 open+trouble, 5 closed+memory, 6 open+memory, 7 bypassed.
-  The bridge treats only `1` as open, so `tests/data/unarmed.html` (zone 5 = 6, open+memory) publishes OFF for an open zone.
+- `tbl_statuszone`: 0 closed, 1 open, 2 in alarm, 3 closed+trouble, 4 open+trouble, 5 closed+memory, 6 open+memory, 7 bypassed,
+  8 closed (drawn like 3), 9 open (drawn like 4). The bridge reads 1, 2, 4, 6 and 9 as open and every other code, unknown ones
+  included, as closed, so `tests/data/unarmed.html` (zone 5 = 6, open+memory) publishes ON for that zone.
 - `tbl_useraccess`: 0 area unused, 1 disarmed, 2 armed, 3 in alarm, 4 sleep, 5 stay, 6 entry delay, 7 exit delay, 8 ready, 9 not ready, 10 instant.
-  The bridge maps 2 and 7 to armed, 1 to disarmed and everything else (including *in alarm*) to "unknown", which publishes nothing.
+  The bridge maps 2, 4, 5, 6, 7 and 10 to armed, 1, 8 and 9 to disarmed, and 0, 3 and unknown codes to "unknown", which publishes
+  nothing; that *in alarm* (3) stays unknown is KB-22.
   `tests/data/armed.html` was captured during exit delay (7).
-- `tbl_zone`: the first number of each pair is an **area bitmask**, not an enabled flag. The bridge keeps `== 1`, i.e. only zones of area 1 alone.
+- `tbl_zone`: the first number of each pair is an **area bitmask**, not an enabled flag. The bridge keeps every slot with a non-zero
+  bitmask, as `paradox/sensor/<slot>` (0-based, the same position in `tbl_statuszone`); armed state and commands still cover area 1
+  only (KB-18).
 - Commands: `GET /statuslive.html?area=NN&value=X`, NN a two-digit 0-based area (`99` = all), X one of `r` arm, `f` force, `s` stay, `i` instant, `p` sleep, `d` disarm.
 - One session at a time, 10 minute lockout after repeated failed logins, the browser keeps alive every 5 s (the bridge: 3 s).
 - Firmware: scraping works on IP100 and IP150 below 4.x. IP150 5.x answers `default.html` but returns 404 for `statuslive.html`; a port should detect that. The forward path for those panels is the binary protocol on TCP 10000 (see the PAI project).
