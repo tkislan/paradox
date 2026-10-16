@@ -80,7 +80,7 @@ function statusListener(zoneTuples) {
   }
   
   let prevRawStatus = { statuszone: [], useraccess: [], alarms: [] };
-  const intervalId = setInterval(async () => {
+  async function poll() {
     let rawStatus;
     try {
       rawStatus = await getStatus();
@@ -112,6 +112,15 @@ function statusListener(zoneTuples) {
 
     prevRawStatus = rawStatus;
     prevStatus = status;
+  }
+
+  let polling = false;
+  const intervalId = setInterval(() => {
+    // A slow answer must not be overtaken by a newer poll, nor polls pile up on a panel that stopped answering.
+    if (polling) return;
+    polling = true;
+    // emit() throws for an 'error' nobody listens to (none at all after stop()) and rethrows a listener's exception.
+    poll().catch(console.error).finally(() => { polling = false; });
   }, 1000);
 
   return {

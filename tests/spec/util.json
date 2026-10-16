@@ -322,7 +322,7 @@
       "name": "login page where the status page was expected (expired session)",
       "content": {"file": "data/login_page.html"},
       "pattern": "tbl_statuszone[ ]+=[ ]+(new Array\\((?:\\d,?)*\\))",
-      "note": "What the status poll sees once the panel dropped the session; see KB-12 for the consequence.",
+      "note": "What the status poll sees once the panel dropped the session, if it serves its login page as the fake panel does; app.js answers the failed poll with a new login.",
       "error": "Regex didn't match the value"
     },
     {

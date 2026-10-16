@@ -75,31 +75,5 @@
       "expected_events": [["armedChanged", true]],
       "known_bug": "KB-18"
     }
-  ],
-  "failures": [
-    {
-      "name": "the login page after the session expired is an error (HTTP 200, no status tables)",
-      "zones": [[1, "A"], [1, "B"]],
-      "polls": [
-        { "statuszone": [1, 0], "useraccess": [1, 0] },
-        { "fail": { "page": { "file": "data/login_page.html" } } }
-      ],
-      "expected_events": [["armedChanged", false], ["sensorChanged", "0", true], ["error"]],
-      "known_bug": "KB-12",
-      "note": "The panel gives no other sign that the session is gone; the bridge never logs in again."
-    },
-    {
-      "name": "a persistently expired session fails every poll",
-      "zones": [[1, "A"], [1, "B"]],
-      "polls": [
-        { "statuszone": [1, 0], "useraccess": [1, 0] },
-        { "fail": { "page": { "file": "data/login_page.html" } } },
-        { "fail": { "page": { "file": "data/login_page.html" } } },
-        { "fail": { "page": { "file": "data/login_page.html" } } }
-      ],
-      "expected_events": [["armedChanged", false], ["sensorChanged", "0", true], ["error"], ["error"], ["error"]],
-      "known_bug": "KB-12",
-      "note": "The listener itself keeps polling; app.js turns the first error into process.exit(1)."
-    }
   ]
 }

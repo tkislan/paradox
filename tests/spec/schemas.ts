@@ -189,14 +189,18 @@ export const StatusMachineSpec = z.strictObject({
   transitions: Timeline,
   zone_indexing: Timeline,
   failures: Timeline,
-  status_poll_cadence: z.array(z.strictObject({ ...row, advance_ms: z.array(z.number()), expected_requests: z.array(z.number()) })),
+  status_poll_cadence: z.array(z.strictObject({
+    ...row,
+    advance_ms: z.array(z.number()),
+    expected_requests: z.array(z.number()),
+    answers_after_step: z.boolean().optional(),
+  })),
 });
 
 export const KnownBugStatusMachineSpec = z.strictObject({
   ...comment,
   first_poll: Timeline,
   armed_codes: Timeline,
-  failures: Timeline,
 });
 
 // system_scenarios.json
@@ -219,6 +223,7 @@ const Expect = z.strictObject({
   panel_requests: z.array(z.string()).optional(),
   panel_requests_any_order: z.array(z.string()).optional(),
   panel_request_counts: z.record(z.string(), z.number()).optional(),
+  panel_requests_ignored: z.array(z.string()).optional(),
   process_exit: z.array(z.number()).optional(),
   logged_error: z.boolean().optional(),
   broker_retained: z.record(z.string(), z.string().nullable()).optional(),
@@ -274,7 +279,7 @@ export const SystemScenariosSpec = z.strictObject({
   ...scenarioGroups,
 });
 
-export const KnownBugSystemScenariosSpec = z.strictObject({ ...comment, ...scenarioGroups });
+export const KnownBugSystemScenariosSpec = z.strictObject({ ...comment, ...scenarioGroups }).omit({ keep_alive: true });
 
 /** Any spec file, for checks that look at every row whatever its table. */
 export const AnySpec = z.record(z.string(), z.json());

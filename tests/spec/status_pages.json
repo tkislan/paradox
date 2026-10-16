@@ -324,6 +324,12 @@
       "name": "index page instead of the status page is an error",
       "page": { "file": "data/index_page.html" },
       "expected": { "error": "Regex didn't match the value" }
+    },
+    {
+      "name": "login page served after the session expired is an error",
+      "page": { "file": "data/login_page.html" },
+      "expected": { "error": "Regex didn't match the value" },
+      "note": "What a real panel serves once the session expired was never captured; the fake panel serves this captured login page with HTTP 200, so the parse error is the only symptom."
     }
   ],
   "requests": [

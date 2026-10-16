@@ -6,13 +6,6 @@
       "page": "tbl_statuszone = new Array(1,0);var stayd=\"0\";tbl_useraccess = new Array(2,0);tbl_alarmes = new Array(\"3\",\"4\");tbl_troubles = new Array(\"16\",\"19\");",
       "expected": { "statuszone": [1, 0], "useraccess": [2, 0], "alarms": [0] },
       "known_bug": "KB-15"
-    },
-    {
-      "name": "login page served after the session expired is an error",
-      "page": { "file": "data/login_page.html" },
-      "expected": { "error": "Regex didn't match the value" },
-      "known_bug": "KB-12",
-      "note": "The panel answers an expired session with HTTP 200 and the login page; the only symptom is the parse error."
     }
   ],
   "requests": [

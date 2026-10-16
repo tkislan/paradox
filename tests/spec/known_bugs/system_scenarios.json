@@ -27,17 +27,6 @@
       ]
     }
   ],
-  "keep_alive": [
-    {
-      "name": "a keep-alive answered with HTTP 500 is only logged",
-      "known_bug": "KB-12",
-      "note": "Unlike a status poll, a keep-alive failure never reaches the exit handler.",
-      "steps": [
-        {"panel_fault": {"path": "/keep_alive.html", "kind": "http_500", "times": 1}, "advance_ms": 3000, "expect": {"logged_error": true, "panel_requests_any_order": ["GET /statuslive.html", "GET /statuslive.html", "GET /statuslive.html", "GET /keep_alive.html?msgid=1"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}},
-        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}}
-      ]
-    }
-  ],
   "armed": [
     {
       "name": "disarmed panel: OFF at the first poll, not repeated",
@@ -145,59 +134,12 @@
   ],
   "failures": [
     {
-      "name": "a status poll answered with HTTP 500 exits with code 1",
-      "known_bug": "KB-12",
+      "name": "after a failed poll that a new login did not fix, the bridge exits without logging out",
+      "known_bug": "KB-3",
+      "note": "The poll fails again less than 60000 ms after the new login started, so the bridge gives up; the session that login opened stays open until the panel times it out or the next start logs out.",
       "steps": [
+        {"panel_fault": {"path": "/statuslive.html", "kind": "http_500", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html", "GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html"]}},
         {"panel_fault": {"path": "/statuslive.html", "kind": "http_500", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "process_exit": [1]}}
-      ]
-    },
-    {
-      "name": "a status poll with a reset connection exits with code 1",
-      "known_bug": "KB-12",
-      "steps": [
-        {"panel_fault": {"path": "/statuslive.html", "kind": "reset", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "process_exit": [1]}}
-      ]
-    },
-    {
-      "name": "a status poll answered with a page without the status tables exits with code 1",
-      "known_bug": "KB-12",
-      "steps": [
-        {"panel_fault": {"path": "/statuslive.html", "kind": "garbage", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "process_exit": [1]}}
-      ]
-    },
-    {
-      "name": "a panel that went away exits with code 1 at the next poll",
-      "known_bug": "KB-12",
-      "steps": [
-        {"panel_down": true, "advance_ms": 1000, "expect": {"process_exit": [1]}}
-      ]
-    },
-    {
-      "name": "an expired panel session exits with code 1 at the next poll",
-      "known_bug": "KB-12",
-      "note": "The panel answers the login page; there is no re-login.",
-      "steps": [
-        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}},
-        {"panel_expire_session": true, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "process_exit": [1]}}
-      ]
-    },
-    {
-      "name": "the first failed poll is fatal even after many good ones",
-      "known_bug": "KB-12",
-      "steps": [
-        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}},
-        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}},
-        {"panel_fault": {"path": "/statuslive.html", "kind": "http_500", "times": 1}, "advance_ms": 1000, "expect": {"process_exit": [1], "panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}}
-      ]
-    },
-    {
-      "name": "a poll that gets no answer does not hold back the next poll, which overlaps it",
-      "known_bug": "KB-13",
-      "note": "No in-flight guard: the second poll goes out while the first is still pending; that one fails only at its 10000 ms timeout.",
-      "steps": [
-        {"panel_fault": {"path": "/statuslive.html", "kind": "hang", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}},
-        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}},
-        {"advance_ms": 1000, "expect": {"panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"]}}
       ]
     }
   ]

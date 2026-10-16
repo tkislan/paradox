@@ -1,5 +1,5 @@
 {
-  "_comment": "End-to-end timelines of the whole bridge (src/app.js and everything it wires together) against a fake panel and a real MQTT broker (Mosquitto 2, shared by all scenarios: each scenario runs under a topic prefix of its own, which the harness adds to everything the bridge publishes and subscribes to and which every topic below leaves out; the broker accepts any client and holds no retained message under the prefix at the start). Each row of a group is one scenario: the bridge is started, then 'steps' are played in order. Setup: 'login' holds the bridge env USERNAME/PASSWORD, the session value the panel hands out and the u/p the panel accepts for that session (an independent copy of a crypto.json vector, so this file stays self-contained); panel has requireLogin on and the default six zones Predsien, Lava izba, Prava izba, Spalna, Obyvacka, Chodba, status tables of 32 zeros, useraccess [1, 0]; time is simulated: 'advance_ms' moves the clock of the bridge's own timers (poll 1000 ms, keep-alive 3000 ms, MQTT connect timeout 5000 ms, the wait between index page attempts at login 1000 ms, the timeout of every panel request 10000 ms) and then waits for the real network effects. Row keys: name, known_bug?, note?, panel?, broker?, start?, steps?. panel: zones ([area bitmask, name] pairs, padded to 32 slots with unused [0, ' '] like the real panel), statuszone, useraccess, accept_login (false: every login is rejected), default_page (the page that answers accepted credentials, an inline string or {file: path relative to tests/}; the captured default page when omitted), down (true: panel is not reachable at startup), faults (list of {path, kind, times?} active from the start; times omitted = for ever). Fault kinds: http_500 (HTTP 500), reset (connection reset before any response), hang (request never answered), login_page (HTTP 200 with the login page), garbage (HTTP 200 with a page that has no status tables), wrong_title (HTTP 200 with a well-formed page titled something else than 'Paradox IP Module'), page (HTTP 200 with the fault's own 'page': an inline string or {file: path relative to tests/}). broker: retained ({topic: payload} the broker already holds, published retained by another client before the bridge starts, replayed on SUBSCRIBE). start: ready (default true: wait until the broker has acknowledged both command subscriptions; false: startup is expected to fail or hang, or goes on in the steps) and expect (checked once startup is over). Step actions, applied in this order within a step: panel_status ({statuszone?, useraccess?, alarms?} the panel serves from now on), panel_fault (same shape as a fault), panel_expire_session, panel_down, mqtt_command ('arm' | 'disarm' | {topic, payload}: 'arm' is topic paradox/command/arm with an empty payload; published, not retained, by another client to the broker, which delivers it to the bridge's subscription), advance_ms, ready (true: then wait, as start.ready does, for both command subscriptions). Expectations (expect) describe what happened DURING that step, i.e. since the previous check; absent keys mean 'nothing': mqtt_published (messages the bridge published, in order, as another client subscribed to the scenario's topics sees them; the command topics, where only that client publishes, are left out), panel_requests (request lines the panel received, in order; at startup absent means not checked), panel_requests_any_order (the same compared as a multiset, for timers firing in the same tick), panel_request_counts ({request line: how many times}, for long stretches of time), process_exit (exit codes passed to process.exit, in order), logged_error (true: at least one error-level log entry was written during the step, false: none; log text is otherwise not contractual, but a failure described as 'only logged' must be logged), and, as an absolute state at the end of the step, broker_retained ({topic: payload, or null for none}: what a client subscribing now gets from the broker's retained store). Besides, the bridge publishes every message retained: at the end of every scenario each topic it published holds the last payload as the broker's retained message. A bug pinned on purpose carries known_bug (catalog id in tests/README.md); those scenarios are in known_bugs/system_scenarios.json, in the same groups. All message payloads are hand-written, nothing is computed by the code under test.",
+  "_comment": "End-to-end timelines of the whole bridge (src/app.js and everything it wires together) against a fake panel and a real MQTT broker (Mosquitto 2, shared by all scenarios: each scenario runs under a topic prefix of its own, which the harness adds to everything the bridge publishes and subscribes to and which every topic below leaves out; the broker accepts any client and holds no retained message under the prefix at the start). Each row of a group is one scenario: the bridge is started, then 'steps' are played in order. Setup: 'login' holds the bridge env USERNAME/PASSWORD, the session value the panel hands out and the u/p the panel accepts for that session (an independent copy of a crypto.json vector, so this file stays self-contained); panel has requireLogin on and the default six zones Predsien, Lava izba, Prava izba, Spalna, Obyvacka, Chodba, status tables of 32 zeros, useraccess [1, 0]; time is simulated: 'advance_ms' moves the clock of the bridge's own timers (poll 1000 ms, keep-alive 3000 ms, MQTT connect timeout 5000 ms, the wait between index page attempts at login 1000 ms, the timeout of every panel request 10000 ms, the 60000 ms that must pass after a new login before a failed poll leads to another) at most 1000 ms at a time, and after each move lets the panel's answers reach the bridge, as from a panel that answers promptly (the bridge skips a tick while its last poll is unanswered); then it waits for the real network effects. Row keys: name, known_bug?, note?, panel?, broker?, start?, steps?. panel: zones ([area bitmask, name] pairs, padded to 32 slots with unused [0, ' '] like the real panel), statuszone, useraccess, accept_login (false: every login is rejected), default_page (the page that answers accepted credentials, an inline string or {file: path relative to tests/}; the captured default page when omitted), down (true: panel is not reachable at startup), faults (list of {path, kind, times?} active from the start; times omitted = for ever). Fault kinds: http_500 (HTTP 500), reset (connection reset before any response), hang (request never answered), login_page (HTTP 200 with the login page), garbage (HTTP 200 with a page that has no status tables), wrong_title (HTTP 200 with a well-formed page titled something else than 'Paradox IP Module'), page (HTTP 200 with the fault's own 'page': an inline string or {file: path relative to tests/}). broker: retained ({topic: payload} the broker already holds, published retained by another client before the bridge starts, replayed on SUBSCRIBE). start: ready (default true: wait until the broker has acknowledged both command subscriptions; false: startup is expected to fail or hang, or goes on in the steps) and expect (checked once startup is over). Step actions, applied in this order within a step: panel_status ({statuszone?, useraccess?, alarms?} the panel serves from now on), panel_fault (same shape as a fault), panel_expire_session, panel_down, mqtt_command ('arm' | 'disarm' | {topic, payload}: 'arm' is topic paradox/command/arm with an empty payload; published, not retained, by another client to the broker, which delivers it to the bridge's subscription), advance_ms, ready (true: then wait, as start.ready does, for both command subscriptions). Expectations (expect) describe what happened DURING that step, i.e. since the previous check; absent keys mean 'nothing': mqtt_published (messages the bridge published, in order, as another client subscribed to the scenario's topics sees them; the command topics, where only that client publishes, are left out), panel_requests (request lines the panel received, in order; at startup absent means not checked), panel_requests_any_order (the same compared as a multiset, for timers firing in the same tick), panel_request_counts ({request line: how many times}, for long stretches of time), panel_requests_ignored (request lines left out of the three above, for a request the row takes no side on: one a known bug is about, or the poll of a tick that falls together with a timeout), process_exit (exit codes passed to process.exit, in order), logged_error (true: at least one error-level log entry was written during the step, false: none; log text is otherwise not contractual, but a failure described as 'only logged' must be logged), and, as an absolute state at the end of the step, broker_retained ({topic: payload, or null for none}: what a client subscribing now gets from the broker's retained store). Besides, the bridge publishes every message retained: at the end of every scenario each topic it published holds the last payload as the broker's retained message. A bug pinned on purpose carries known_bug (catalog id in tests/README.md); those scenarios are in known_bugs/system_scenarios.json, in the same groups. All message payloads are hand-written, nothing is computed by the code under test.",
   "login": {"session": "91AC25D06A0C26BA", "username": "user", "password": "1234", "u": "EBA2095C", "p": "82016AC9BD9B087D6C393B19C756B255"},
   "startup": [
     {
@@ -62,6 +62,14 @@
       "name": "steady state: 30 s of an unchanged panel are 30 polls, 10 keep-alives and a single message",
       "steps": [
         {"advance_ms": 30000, "expect": {"panel_request_counts": {"GET /statuslive.html": 30, "GET /keep_alive.html?msgid=1": 10}, "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}}
+      ]
+    },
+    {
+      "name": "a keep-alive answered with HTTP 500 is only logged",
+      "note": "Unlike a failed status poll, a failed keep-alive does not lead to a new login.",
+      "steps": [
+        {"panel_fault": {"path": "/keep_alive.html", "kind": "http_500", "times": 1}, "advance_ms": 3000, "expect": {"logged_error": true, "panel_requests_any_order": ["GET /statuslive.html", "GET /statuslive.html", "GET /statuslive.html", "GET /keep_alive.html?msgid=1"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}},
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}}
       ]
     },
     {
@@ -352,6 +360,118 @@
         {"advance_ms": 1000, "expect": {"panel_requests": ["GET /index.html"]}},
         {"advance_ms": 1000, "expect": {"panel_requests": ["GET /index.html"]}},
         {"advance_ms": 1000, "expect": {"panel_requests": ["GET /index.html", "GET /logout.html"], "process_exit": [1]}}
+      ]
+    },
+    {
+      "name": "a status poll answered with HTTP 500 is followed by a new login, and polling goes on",
+      "steps": [
+        {"panel_fault": {"path": "/statuslive.html", "kind": "http_500", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html", "GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html"]}},
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}}
+      ]
+    },
+    {
+      "name": "a status poll with a reset connection is followed by a new login, and polling goes on",
+      "steps": [
+        {"panel_fault": {"path": "/statuslive.html", "kind": "reset", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html", "GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html"]}},
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}}
+      ]
+    },
+    {
+      "name": "a status poll answered with a page without the status tables is followed by a new login, and polling goes on",
+      "steps": [
+        {"panel_fault": {"path": "/statuslive.html", "kind": "garbage", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html", "GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html"]}},
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}}
+      ]
+    },
+    {
+      "name": "an expired panel session fails the next poll, and the new login after it makes the polls publish again",
+      "note": "What a real panel answers once the session expired was never captured; the fake panel answers its login page.",
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}},
+        {"panel_expire_session": true, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html", "GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html"]}},
+        {"advance_ms": 1000, "panel_status": {"useraccess": [2, 0]}, "expect": {"panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "ON"}]}}
+      ]
+    },
+    {
+      "name": "after many good polls, the first failed one is followed by a new login",
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}},
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}},
+        {"panel_fault": {"path": "/statuslive.html", "kind": "http_500", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1", "GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html"]}}
+      ]
+    },
+    {
+      "name": "a panel that went away ends the bridge with exit code 1",
+      "note": "The panel refuses the connections, so it sees none of the requests: neither the poll nor the new login after it.",
+      "steps": [
+        {"panel_down": true, "advance_ms": 1000, "expect": {"process_exit": [1]}}
+      ]
+    },
+    {
+      "name": "a new login rejected by the panel after a failed poll exits with code 1",
+      "steps": [
+        {"panel_fault": {"path": "/default.html", "kind": "wrong_title"}, "panel_expire_session": true, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html", "GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255"], "process_exit": [1]}}
+      ]
+    },
+    {
+      "name": "polls that fail while the new login is still pending start no second one",
+      "note": "The new login waits 1000 ms between index page attempts, so it is still pending when the polls at 2000 and 3000 ms fail.",
+      "steps": [
+        {"panel_fault": {"path": "/index.html", "kind": "http_500", "times": 3}, "expect": {}},
+        {"panel_fault": {"path": "/statuslive.html", "kind": "http_500", "times": 3}, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html", "GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html"]}},
+        {"advance_ms": 1000, "expect": {"panel_requests_any_order": ["GET /statuslive.html", "GET /index.html"]}},
+        {"advance_ms": 1000, "expect": {"panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1", "GET /index.html"]}},
+        {"advance_ms": 1000, "expect": {"panel_requests_any_order": ["GET /statuslive.html", "GET /index.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}}
+      ]
+    },
+    {
+      "name": "a poll failing again 59000 ms after the new login started exits with code 1",
+      "note": "Whether the bridge logs out before it exits is KB-3, so the logout is left out of the comparison.",
+      "steps": [
+        {"panel_fault": {"path": "/statuslive.html", "kind": "http_500", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html", "GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html"]}},
+        {"advance_ms": 58000, "expect": {"panel_request_counts": {"GET /statuslive.html": 58, "GET /keep_alive.html?msgid=1": 19}, "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}},
+        {"panel_fault": {"path": "/statuslive.html", "kind": "http_500", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests_any_order": ["GET /statuslive.html", "GET /keep_alive.html?msgid=1"], "panel_requests_ignored": ["GET /logout.html"], "process_exit": [1]}}
+      ]
+    },
+    {
+      "name": "a poll failing again 60000 ms after the new login started is followed by another new login",
+      "steps": [
+        {"panel_fault": {"path": "/statuslive.html", "kind": "http_500", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html", "GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html"]}},
+        {"advance_ms": 59000, "expect": {"panel_request_counts": {"GET /statuslive.html": 59, "GET /keep_alive.html?msgid=1": 20}, "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}},
+        {"panel_fault": {"path": "/statuslive.html", "kind": "http_500", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html", "GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html"]}},
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}}
+      ]
+    },
+    {
+      "name": "the 60000 ms count starts again at every new login: a poll failing 1000 ms after the second one exits with code 1",
+      "note": "Whether the bridge logs out before it exits is KB-3, so the logout is left out of the comparison.",
+      "steps": [
+        {"panel_fault": {"path": "/statuslive.html", "kind": "http_500", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html", "GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html"]}},
+        {"advance_ms": 59000, "expect": {"panel_request_counts": {"GET /statuslive.html": 59, "GET /keep_alive.html?msgid=1": 20}, "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}},
+        {"panel_fault": {"path": "/statuslive.html", "kind": "http_500", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html", "GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html"]}},
+        {"panel_fault": {"path": "/statuslive.html", "kind": "http_500", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "panel_requests_ignored": ["GET /logout.html"], "process_exit": [1]}}
+      ]
+    },
+    {
+      "name": "the 60000 ms count from the start of the new login: a poll failing 60000 ms after it started and 59000 ms after it ended is followed by another one",
+      "note": "The index page fails once, so the new login started at 1000 ms ends only at 2000 ms.",
+      "steps": [
+        {"panel_fault": {"path": "/index.html", "kind": "http_500", "times": 1}, "expect": {}},
+        {"panel_fault": {"path": "/statuslive.html", "kind": "http_500", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html", "GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html"]}},
+        {"advance_ms": 1000, "expect": {"panel_requests_any_order": ["GET /statuslive.html", "GET /index.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}},
+        {"advance_ms": 58000, "expect": {"panel_request_counts": {"GET /statuslive.html": 58, "GET /keep_alive.html?msgid=1": 20}}},
+        {"panel_fault": {"path": "/statuslive.html", "kind": "http_500", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html", "GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html"]}}
+      ]
+    },
+    {
+      "name": "a poll that gets no answer holds back the next polls until it times out, then a new login follows",
+      "note": "The poll sent at 2000 ms times out at 12000 ms, where a tick falls as well: whether that tick still finds the poll pending depends on which of the two timers runs first, so its poll is left out of the comparison.",
+      "steps": [
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"], "mqtt_published": [{"topic": "paradox/status/armed", "payload": "OFF"}]}},
+        {"panel_fault": {"path": "/statuslive.html", "kind": "hang", "times": 1}, "advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}},
+        {"advance_ms": 9999, "expect": {"panel_request_counts": {"GET /keep_alive.html?msgid=1": 3}}},
+        {"advance_ms": 1, "expect": {"panel_requests_any_order": ["GET /keep_alive.html?msgid=1", "GET /logout.html", "GET /login_page.html", "GET /default.html?u=EBA2095C&p=82016AC9BD9B087D6C393B19C756B255", "GET /index.html"], "panel_requests_ignored": ["GET /statuslive.html"]}},
+        {"advance_ms": 1000, "expect": {"panel_requests": ["GET /statuslive.html"]}}
       ]
     }
   ]

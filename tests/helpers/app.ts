@@ -5,11 +5,12 @@ import { FakePanel } from '../mock_paradox.ts';
 import { type Broker, watchBroker } from '../mosquitto.ts';
 import type { Expect, PanelFault, Scenario, ScenarioBroker, ScenarioPanel, Step } from '../spec/schemas.ts';
 import {
-  captureConsole, isolateProcessListeners, onCleanup, reservePort, setBridgeEnv, settle,
+  captureConsole, captureUnhandledRejections, isolateProcessListeners, onCleanup, reservePort, setBridgeEnv, settle,
   specText, spyProcessExit, useFakeClock, waitFor,
 } from '../support.ts';
+import { drain } from './panel_faults.ts';
 import {
-  FAULTS, QUIET_MS, REACH_TIMEOUT_MS, READY_TIMEOUT_MS, WAIT_INTERVAL_MS, login,
+  FAULTS, POLL_INTERVAL_MS, QUIET_MS, REACH_TIMEOUT_MS, READY_TIMEOUT_MS, WAIT_INTERVAL_MS, login,
 } from '../fixtures/app.ts';
 
 const require = createRequire(import.meta.url);
@@ -22,17 +23,6 @@ const faultResponse = (fault: PanelFault) => {
 };
 
 const addFault = (panel: FakePanel, fault: PanelFault) => panel.respondWith(fault.path, faultResponse(fault), fault.times ? { times: fault.times } : {});
-
-/** Swaps vitest's own handler out so the test can observe unhandled rejections instead of failing the run. */
-function captureUnhandledRejections(seen: unknown[]) {
-  const saved = process.listeners('unhandledRejection');
-  process.removeAllListeners('unhandledRejection');
-  process.on('unhandledRejection', (reason) => seen.push(reason));
-  onCleanup(() => {
-    process.removeAllListeners('unhandledRejection');
-    saved.forEach((listener) => process.on('unhandledRejection', listener));
-  });
-}
 
 /**
  * Puts the bridge's MQTT client under the test's topic prefix: what it publishes and subscribes to goes under the
@@ -119,8 +109,8 @@ export async function createBridge({ panel: panelSpec = {}, broker: brokerSpec =
   };
 
   // The bridge's own shutdown path stops its timers and closes its REST server, which a mocked
-  // process.exit would otherwise leave running. The panel goes first: a request still hanging at
-  // this point must fail while the 'error' handler is attached, because stop() detaches it.
+  // process.exit would otherwise leave running. The panel goes first, so that a request still hanging
+  // fails while the bridge's handlers are attached, as it would in production, not after stop() detached them.
   onCleanup(async () => {
     await panel.stop();
     if (world.hungRequests) await settle(QUIET_MS);
@@ -150,6 +140,23 @@ export async function createBridge({ panel: panelSpec = {}, broker: brokerSpec =
 
 type World = Awaited<ReturnType<typeof createBridge>>;
 
+/**
+ * Moves the fake clock one poll interval at a time and lets the panel's answers reach the bridge in between, as they
+ * would from a panel that answers promptly. In one long jump the real sockets fall behind the clock, and the bridge
+ * skips every tick whose poll they have not answered yet.
+ */
+async function advance(world: World, ms: number) {
+  for (let left = ms; left > 0; left -= POLL_INTERVAL_MS) {
+    await world.clock.advance(Math.min(left, POLL_INTERVAL_MS));
+    // An answer can start the next request (a login is several), so this goes on until the panel hears nothing new.
+    let heard: number;
+    do {
+      heard = world.panel.requests.length;
+      await drain();
+    } while (world.panel.requests.length > heard);
+  }
+}
+
 async function perform(world: World, step: Step) {
   if (step.panel_status) world.panel.setStatus(step.panel_status);
   if (step.panel_fault) {
@@ -164,7 +171,7 @@ async function perform(world: World, step: Step) {
       : step.mqtt_command;
     await world.broker.publish(topic, payload);
   }
-  if (step.advance_ms) await world.clock.advance(step.advance_ms);
+  if (step.advance_ms) await advance(world, step.advance_ms);
   if (step.ready) await world.awaitReady();
 }
 
@@ -179,6 +186,7 @@ async function expectOutcome(world: World, expected: Expect, { checkRequests = t
   const wantRequestCounts = expected.panel_request_counts;
   const wantRequestTotal = wantRequestCounts ? Object.values<number>(wantRequestCounts).reduce((a, b) => a + b, 0) : wantRequests.length;
   const wantExits = expected.process_exit ?? [];
+  const ignored = expected.panel_requests_ignored ?? [];
   const { broker } = world;
 
   const fresh = () => ({
@@ -187,10 +195,11 @@ async function expectOutcome(world: World, expected: Expect, { checkRequests = t
     exits: world.exitCodes().slice(world.seen.exits),
     errors: world.logs.error.slice(world.seen.errors),
   });
+  const checked = (requests: string[]) => requests.filter((line) => !ignored.includes(line));
   const reached = () => {
     const now = fresh();
     return now.published.length >= wantPublished.length
-      && (!checkRequests || now.requests.length >= wantRequestTotal)
+      && (!checkRequests || checked(now.requests).length >= wantRequestTotal)
       && now.exits.length >= wantExits.length
       && (expected.logged_error !== true || now.errors.length > 0);
   };
@@ -205,10 +214,10 @@ async function expectOutcome(world: World, expected: Expect, { checkRequests = t
   const wanted: Record<string, any> = { mqtt_published: wantPublished, process_exit: wantExits };
   if (checkRequests && wantRequestCounts) {
     actual.panel_request_counts = {};
-    now.requests.forEach((line) => { actual.panel_request_counts[line] = (actual.panel_request_counts[line] ?? 0) + 1; });
+    checked(now.requests).forEach((line) => { actual.panel_request_counts[line] = (actual.panel_request_counts[line] ?? 0) + 1; });
     wanted.panel_request_counts = wantRequestCounts;
   } else if (checkRequests) {
-    actual.panel_requests = anyOrder ? [...now.requests].sort() : now.requests;
+    actual.panel_requests = anyOrder ? checked(now.requests).sort() : checked(now.requests);
     wanted.panel_requests = anyOrder ? [...wantRequests].sort() : wantRequests;
   }
   if ('logged_error' in expected) {
