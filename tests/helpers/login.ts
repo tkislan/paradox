@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
-import { expect } from 'vitest';
+import { expect, vi } from 'vitest';
 import { FakePanel, type FakePanelOptions, type PanelResult, renderIndexPage, type Zone } from '../mock_paradox.ts';
-import { captureConsole, loadSpec, setBridgeEnv, specText } from '../support.ts';
+import { captureConsole, loadSpec, setBridgeEnv, settle, specText, useFakeClock, waitFor } from '../support.ts';
 import { CryptoSpec, LoginCasesSpec, type ResponseRule } from '../spec/schemas.ts';
 
 const require = createRequire(import.meta.url);
@@ -18,7 +18,10 @@ export function vector(name: string) {
 
 export const golden = vector('sample session, 4 digit code');
 
-export const SAMPLE_ZONES: Zone[] = [[1, 'Predsien'], [1, 'Lava izba'], [1, 'Prava izba'], [1, 'Spalna'], [1, 'Obyvacka'], [1, 'Chodba']];
+export const SAMPLE_ZONES: Zone[] = [
+  [1, 'Predsien'], [1, 'Lava izba'], [1, 'Prava izba'], [1, 'Spalna'], [1, 'Obyvacka'], [1, 'Chodba'],
+  ...Array<Zone>(26).fill([0, ' ']),
+];
 
 export const FLOW_PATHS = ['/logout.html', '/login_page.html', '/default.html', '/index.html'];
 
@@ -83,12 +86,68 @@ export function expectRequestCounts(panel, counts: Record<string, number>) {
 export async function runLoginScenario(row) {
   const bridge = await startBridge({ responses: row.panel });
 
-  await expectScenario(row, bridge);
+  await expectScenario(row, bridge, await outcomeOf(bridge.login()));
 }
 
-export async function expectScenario(row, { panel, output, login }) {
-  const outcome = await outcomeOf(login());
+/**
+ * Plays an index_retry row on the fake clock: before each further /index.html attempt the clock stops 1 ms short of its
+ * time in expected.index_at_ms, where no new request may have come, then moves on to it.
+ */
+export async function runIndexRetryScenario(row) {
+  const clock = useFakeClock();
+  const bridge = await startBridge({ responses: row.panel });
+  let outcome;
+  outcomeOf(bridge.login()).then((settled) => { outcome = settled; });
+  const times = row.expected.index_at_ms;
+  const attempts = () => bridge.panel.requestsTo('/index.html').length;
 
+  await waitFor(() => attempts() >= 1, { message: 'the first index page request' });
+  for (let attempt = 1; attempt < times.length; attempt += 1) {
+    // Moving the clock before the failed attempt has started its wait would skip past the wait unnoticed.
+    await waitFor(() => vi.getTimerCount() > 0, { message: `the wait before index page request ${attempt + 1}` });
+    await clock.advance(times[attempt] - times[attempt - 1] - 1);
+    await settle();
+    expect(attempts()).toBe(attempt);
+    await clock.advance(1);
+    await waitFor(() => attempts() > attempt, { message: `index page request ${attempt + 1}` });
+  }
+  await waitFor(() => outcome, { message: 'login() to settle without another wait' });
+  await expectScenario(row, bridge, outcome);
+}
+
+/**
+ * Plays a hangs row on the fake clock: before each time in expected.requests and expected.settles_at_ms the clock stops
+ * 1 ms short, where no new request may have come and login() may not have settled, then moves on to it.
+ */
+export async function runHangScenario(row) {
+  const clock = useFakeClock();
+  const bridge = await startBridge({ responses: row.panel });
+  let outcome;
+  outcomeOf(bridge.login()).then((settled) => { outcome = settled; });
+  const { requests, settles_at_ms: settlesAt } = row.expected;
+  const times = [...new Set([...requests.map(([at]) => at), settlesAt])].sort((a, b) => a - b);
+  const arrivedBy = (time) => requests.filter(([at]) => at <= time).length;
+  let now = 0;
+
+  for (const time of times) {
+    if (time > now) {
+      await clock.advance(time - now - 1);
+      await settle();
+      expect(bridge.panel.requests).toHaveLength(arrivedBy(time - 1));
+      expect(outcome).toBeUndefined();
+      await clock.advance(1);
+      now = time;
+    }
+    await waitFor(() => bridge.panel.requests.length >= arrivedBy(time), { message: `the requests due at ${time} ms` });
+  }
+  await waitFor(() => outcome, { message: `login() to settle at ${settlesAt} ms` });
+  await settle();
+
+  expectOutcome(row, bridge.output, outcome);
+  expect(bridge.panel.requests.map((request) => request.path)).toEqual(requests.map(([, path]) => path));
+}
+
+function expectOutcome(row, output, outcome) {
   if (row.expected.error !== undefined) {
     expect(outcome.value).toBeUndefined();
     expect(outcome.error?.message).toBe(row.expected.error);
@@ -96,6 +155,10 @@ export async function expectScenario(row, { panel, output, login }) {
     expect(outcome).toEqual({ value: { zoneTuples: row.expected.zoneTuples } });
   }
   expect(warnings(output)).toEqual(row.expected.warnings ?? []);
+}
+
+export async function expectScenario(row, { panel, output }, outcome) {
+  expectOutcome(row, output, outcome);
   expectRequestCounts(panel, expectedCounts(row));
   if (row.expected.default_query !== undefined) {
     expect(panel.requestsTo('/default.html')[0].url).toBe(`/default.html?${row.expected.default_query}`);

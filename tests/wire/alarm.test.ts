@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { ARMED, DISARMED } from '../mock_paradox.ts';
 import { withTitle } from '../support.ts';
-import { rejection } from '../helpers/outcomes.ts';
+import { expectTimeout, rejection } from '../helpers/outcomes.ts';
 import { html } from '../helpers/responses.ts';
-import { COMMANDS, expectResponseHandled, spec, startBridge } from '../helpers/alarm.ts';
+import { COMMANDS, expectResponseHandled, requestRows, spec, startBridge } from '../helpers/alarm.ts';
 
 describe('requests as sent', () => {
   it('concurrent commands are all sent, without debouncing', async () => {
@@ -35,6 +35,42 @@ describe('effect on the panel', () => {
 
 describe.each(COMMANDS)('%s() outcome', (command) => {
   it.each(withTitle(spec.body_ignoring_responses))('$title', (row) => expectResponseHandled(command, row));
+
+  it.each(withTitle(requestRows(spec.login_page_responses, command)))('$title', (row) => expectResponseHandled(command, row));
+
+  it('rejects after the session expired, and the panel did nothing', async () => {
+    const useraccess = command === 'arm' ? [DISARMED, 0] : [ARMED, 0];
+    const api = await startBridge({ requireLogin: true, useraccess });
+    expect(api.panel.loggedIn).toBe(false);
+
+    const error = await rejection(api[command]());
+
+    expect(error.message).toBe('Command answered with the login page');
+    expect(api.panel.useraccess).toEqual(useraccess);
+    expect(api.panel.requestsTo('/statuslive.html')).toHaveLength(1);
+  });
+
+  it('rejects a redirect to the login page like the login page itself', async () => {
+    const api = await startBridge();
+    api.panel.respondWith('/statuslive.html', html('', 302, { Location: '/login_page.html' }), { times: 1 });
+
+    const error = await rejection(api[command]());
+
+    expect(error.message).toBe('Command answered with the login page');
+    expect(api.panel.requestLines).toHaveLength(2);
+    expect(api.panel.requestLines[1]).toBe('GET /login_page.html');
+  });
+
+  it('rejects a redirect to a missing page like the missing page itself', async () => {
+    const api = await startBridge();
+    api.panel.respondWith('/statuslive.html', html('', 302, { Location: '/nowhere.html' }), { times: 1 });
+
+    const error = await rejection(api[command]());
+
+    expect(error.message).toBe('Request failed with status code 404');
+    expect(api.panel.requestLines).toHaveLength(2);
+    expect(api.panel.requestLines[1]).toBe('GET /nowhere.html');
+  });
 
   it('gives up on a redirect loop instead of following it forever', async () => {
     const api = await startBridge();
@@ -83,5 +119,17 @@ describe.each(COMMANDS)('%s() outcome', (command) => {
 
     expect(error.code).toBe('ECONNRESET');
     expect(api.panel.requestsTo('/statuslive.html')).toHaveLength(1);
+  });
+
+  it('rejects 10000 ms after the call when the panel never answers', async () => {
+    const api = await startBridge();
+
+    await expectTimeout(api.panel, '/statuslive.html', api[command]);
+  });
+
+  it('rejects 10000 ms after the call when the panel stalls halfway through the body', async () => {
+    const api = await startBridge();
+
+    await expectTimeout(api.panel, '/statuslive.html', api[command], { stall: '<html><head>' });
   });
 });

@@ -8,7 +8,7 @@ import { z } from 'zod';
 const row = { name: z.string(), note: z.string().optional(), known_bug: z.string().optional() };
 const comment = { _comment: z.string() };
 
-/** [enabled, name] of a panel zone. */
+/** [area bitmask, name] of a tbl_zone slot; bitmask 0 is an unused slot. */
 const Zone = z.tuple([z.number(), z.string()]);
 
 /** Text given inline, or as {file} relative to tests/. */
@@ -49,7 +49,7 @@ const Returned = z.union([z.string(), z.number(), z.null()]);
 
 const util = {
   deepArrayEqual: z.array(z.strictObject({ ...row, a: z.array(z.json()).nullable(), b: z.array(z.json()).nullable(), expected: z.boolean() })),
-  getJsValue: z.array(z.strictObject({ ...row, content: Text, pattern: z.string(), expected: z.json(), js_only: z.boolean().optional() })),
+  getJsValue: z.array(z.strictObject({ ...row, content: Text, pattern: z.string(), expected: z.json() })),
   iterateTuples: z.array(z.strictObject({ ...row, list: TupleList, expected: z.array(Zone) })),
 };
 
@@ -57,23 +57,21 @@ export const UtilSpec = z.strictObject({
   ...comment,
   ...util,
   getJsValue_errors: z.array(z.strictObject({ ...row, content: Text, pattern: z.string(), error: z.string() })),
+  getJsValue_not_json: z.array(z.strictObject({ ...row, content: Text, pattern: z.string() })),
   iterateTuples_errors: z.array(z.strictObject({ ...row, list: TupleList, error: z.string() })),
   retry: z.array(z.strictObject({
     ...row,
     max_retries: z.number(),
     wait_ms: z.number(),
     attempts: z.array(z.union([z.strictObject({ returns: Returned }), z.strictObject({ throws: z.string() })])),
-    expected: z.strictObject({ calls: z.number(), returns: Returned.optional(), throws: z.string().optional() }),
+    expected: z.strictObject({ call_at_ms: z.array(z.number()), returns: Returned.optional(), throws: z.string().optional() }),
   })),
   objectEntries: z.array(z.strictObject({ ...row, object: z.record(z.string(), z.json()), expected: z.array(z.tuple([z.string(), z.json()])) })),
 });
 
-export const KnownBugUtilSpec = z.strictObject({ ...comment, ...util });
+export const KnownBugUtilSpec = z.strictObject({ ...comment, deepArrayEqual: util.deepArrayEqual });
 
 // status_pages.json
-
-/** A parsed status table: its values, or how many empty slots `new Array(n)` made. */
-const Slots = z.union([z.array(z.number()), z.strictObject({ empty_slots: z.number() })]);
 
 export const StatusPagesSpec = z.strictObject({
   ...comment,
@@ -81,7 +79,9 @@ export const StatusPagesSpec = z.strictObject({
     ...row,
     page: Text,
     expected: z.union([
-      z.strictObject({ statuszone: Slots, useraccess: Slots, alarms: z.array(z.number()) }),
+      z.strictObject({
+        statuszone: z.array(z.number()), useraccess: z.array(z.number()), alarms: z.array(z.number()), troubles: z.array(z.number()),
+      }),
       z.strictObject({ error: z.string() }),
     ]),
   })),
@@ -97,7 +97,15 @@ export const StatusPagesSpec = z.strictObject({
     response: z.strictObject({ status: z.number(), body: Text }),
     expected: z.union([z.strictObject({ result: z.null() }), z.strictObject({ error: z.string() })]),
   })),
+  login_page_responses: z.array(z.strictObject({
+    ...row,
+    operation: z.string(),
+    response: z.strictObject({ status: z.number(), body: Text }),
+    expected: z.strictObject({ error: z.string() }),
+  })),
 });
+
+export const KnownBugStatusPagesSpec = StatusPagesSpec.omit({ get_status: true, login_page_responses: true });
 
 // login_cases.json
 
@@ -131,6 +139,15 @@ const LoginRow = z.strictObject({ ...row, panel: Responses, expected: LoginOutco
 export const LoginCasesSpec = z.strictObject({
   ...comment,
   login: z.array(LoginRow),
+  index_retry: z.array(z.strictObject({ ...row, panel: Responses, expected: LoginOutcome.extend({ index_at_ms: z.array(z.number()) }) })),
+  hangs: z.array(z.strictObject({
+    ...row,
+    panel: Responses,
+    expected: LoginOutcome.omit({ request_counts: true, default_query: true }).extend({
+      requests: z.array(z.tuple([z.number(), z.string()])),
+      settles_at_ms: z.number(),
+    }),
+  })),
   logout: z.array(z.strictObject({ ...row, panel: Responses, expected: z.strictObject({ error: z.string().optional() }) })),
   request_headers: z.array(z.strictObject({
     ...row,
@@ -140,13 +157,6 @@ export const LoginCasesSpec = z.strictObject({
     headers_starting_with: z.record(z.string(), z.string()).optional(),
     absent: z.array(z.string()).optional(),
   })),
-});
-
-export const KnownBugLoginCasesSpec = z.strictObject({
-  ...comment,
-  login: z.array(LoginRow),
-  index_retry: z.array(LoginRow),
-  hangs: z.array(z.strictObject({ ...row, hang: z.string(), expected: z.strictObject({ request_counts: z.record(z.string(), z.number()) }) })),
 });
 
 // status_machine.json
@@ -179,17 +189,20 @@ export const StatusMachineSpec = z.strictObject({
   armed_codes: Timeline,
   sensor_codes: Timeline,
   transitions: Timeline,
+  zone_indexing: Timeline,
   failures: Timeline,
-  status_poll_cadence: z.array(z.strictObject({ ...row, advance_ms: z.array(z.number()), expected_requests: z.array(z.number()) })),
+  status_poll_cadence: z.array(z.strictObject({
+    ...row,
+    advance_ms: z.array(z.number()),
+    expected_requests: z.array(z.number()),
+    answers_after_step: z.boolean().optional(),
+  })),
 });
 
 export const KnownBugStatusMachineSpec = z.strictObject({
   ...comment,
   first_poll: Timeline,
   armed_codes: Timeline,
-  sensor_codes: Timeline,
-  zone_indexing: Timeline,
-  failures: Timeline,
 });
 
 // system_scenarios.json
@@ -212,6 +225,7 @@ const Expect = z.strictObject({
   panel_requests: z.array(z.string()).optional(),
   panel_requests_any_order: z.array(z.string()).optional(),
   panel_request_counts: z.record(z.string(), z.number()).optional(),
+  panel_requests_ignored: z.array(z.string()).optional(),
   process_exit: z.array(z.number()).optional(),
   logged_error: z.boolean().optional(),
   broker_retained: z.record(z.string(), z.string().nullable()).optional(),
@@ -219,12 +233,13 @@ const Expect = z.strictObject({
 export type Expect = z.infer<typeof Expect>;
 
 const Step = z.strictObject({
-  panel_status: z.strictObject({ ...PanelState, alarms: z.array(z.string()).optional() }).optional(),
+  panel_status: z.strictObject({ ...PanelState, alarms: z.array(z.string()).optional(), troubles: z.array(z.string()).optional() }).optional(),
   panel_fault: PanelFault.optional(),
   panel_expire_session: z.boolean().optional(),
   panel_down: z.boolean().optional(),
   mqtt_command: z.union([z.enum(['arm', 'disarm']), z.strictObject({ topic: z.string(), payload: z.string() })]).optional(),
   advance_ms: z.number().optional(),
+  ready: z.boolean().optional(),
   expect: Expect.optional(),
 });
 export type Step = z.infer<typeof Step>;
@@ -233,6 +248,7 @@ export const ScenarioPanel = z.strictObject({
   ...PanelState,
   zones: z.array(Zone).optional(),
   accept_login: z.boolean().optional(),
+  default_page: Text.optional(),
   down: z.boolean().optional(),
   faults: z.array(PanelFault).optional(),
 });
@@ -265,7 +281,7 @@ export const SystemScenariosSpec = z.strictObject({
   ...scenarioGroups,
 });
 
-export const KnownBugSystemScenariosSpec = z.strictObject({ ...comment, ...scenarioGroups });
+export const KnownBugSystemScenariosSpec = z.strictObject({ ...comment, ...scenarioGroups }).omit({ keep_alive: true, failures: true });
 
 /** Any spec file, for checks that look at every row whatever its table. */
 export const AnySpec = z.record(z.string(), z.json());

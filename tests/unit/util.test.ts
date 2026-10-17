@@ -3,6 +3,7 @@ import { deepArrayEqual, getJsValue, iterateTuples, objectEntries, retry, sleep 
 import {
   captureConsole, cases, loadSpec, settle, specText, spyProcessExit, useFakeClock, waitFor,
 } from '../support.ts';
+import { track } from '../helpers/outcomes.ts';
 import { expectDeepArrayEqual, expectJsValue, expectTuples, scripted } from '../helpers/util.ts';
 import { UtilSpec } from '../spec/schemas.ts';
 
@@ -82,47 +83,21 @@ describe('getJsValue', () => {
     });
   });
 
-  describe('the matched text is JavaScript run in a fresh, empty context', () => {
-    it.each(['process', 'require', 'module', 'Buffer', 'setTimeout'])('%s is not defined there', (name) => {
+  describe('the matched text is parsed as data, never run', () => {
+    it.each(cases(spec.getJsValue_not_json))('%s', (_title, { content, pattern }) => {
 
-      expect(getJsValue(`x=typeof ${name}`, /x=(.*)/)).toBe('undefined');
+      expect(() => getJsValue(specText(content), new RegExp(pattern))).toThrow(expect.objectContaining({ name: 'SyntaxError' }));
     });
 
-    it('cannot call into the host process', () => {
+    it('a process.exit call is rejected and the process keeps running', () => {
       const exit = spyProcessExit();
 
-      expect(() => getJsValue('x=process.exit(7)', /x=(.*)/))
-        .toThrow(expect.objectContaining({ name: 'ReferenceError', message: 'process is not defined' }));
+      expect(() => getJsValue('x=process.exit(7)', /x=(.*)/)).toThrow(expect.objectContaining({ name: 'SyntaxError' }));
       expect(exit).not.toHaveBeenCalled();
-    });
-
-    // A plain {} sandbox would make this resolve to the host's Function, and process would be reachable.
-    it('has no prototype chain into the host, so this.constructor.constructor cannot reach process', () => {
-
-      expect(getJsValue('x=this.constructor.constructor("return typeof process")()', /x=(.*)/)).toBe('undefined');
-    });
-
-    it('does not keep state between calls or leak into the host', () => {
-
-      getJsValue('x=leaked=5', /x=(.*)/);
-
-      expect(getJsValue('x=typeof leaked', /x=(.*)/)).toBe('undefined');
-      expect(globalThis.leaked).toBeUndefined();
-    });
-
-    it('rethrows syntax errors from the matched text', () => {
-
-      expect(() => getJsValue('x=foo(', /x=(.*)/)).toThrow(expect.objectContaining({ name: 'SyntaxError' }));
-    });
-
-    it('rethrows runtime errors from the matched text', () => {
-
-      expect(() => getJsValue('x=foo', /x=(.*)/))
-        .toThrow(expect.objectContaining({ name: 'ReferenceError', message: 'foo is not defined' }));
     });
   });
 
-  it('evaluates to undefined when the regexp has no capture group, or the group is empty or unmatched', () => {
+  it('returns undefined when the regexp has no capture group, or the group is empty or unmatched', () => {
 
     expect(getJsValue('ab', /ab/)).toBeUndefined();
     expect(getJsValue('x=', /x=(.*)/)).toBeUndefined();
@@ -166,14 +141,30 @@ describe('iterateTuples', () => {
 
 describe('retry', () => {
   it.each(cases(spec.retry))('%s', async (_title, { max_retries: max, wait_ms: wait, attempts, expected }) => {
+    const clock = useFakeClock();
     const f = scripted(attempts);
+    let outcome = {};
+    retry(max, wait, f).then((returns) => { outcome = { returns }; }, (error) => { outcome = { throws: error.message }; });
 
-    const outcome = await retry(max, wait, f).then(
-      (returns) => ({ calls: f.calls, returns }),
-      (error) => ({ calls: f.calls, throws: error.message }),
-    );
+    await clock.advance(expected.call_at_ms.at(-1));
 
-    expect(outcome).toStrictEqual(expected);
+    expect({ call_at_ms: f.calledAt, ...outcome }).toStrictEqual(expected);
+  });
+
+  it('starts a new attempt only once the wait time has passed', async () => {
+    const clock = useFakeClock();
+    const f = vi.fn().mockRejectedValueOnce(new Error('e1')).mockRejectedValueOnce(new Error('e2')).mockResolvedValue('ok');
+    const call = track(retry(10, 1000, f));
+
+    await clock.advance(999);
+    expect(f).toHaveBeenCalledTimes(1);
+    await clock.advance(1);
+    expect(f).toHaveBeenCalledTimes(2);
+    await clock.advance(999);
+    expect(f).toHaveBeenCalledTimes(2);
+    await clock.advance(1);
+    expect(f).toHaveBeenCalledTimes(3);
+    expect(call).toEqual({ state: 'resolved', value: 'ok' });
   });
 
   it('passes the extra arguments to every attempt', async () => {

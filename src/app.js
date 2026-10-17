@@ -13,6 +13,9 @@ const { setupSignalHandler } = require('./signal');
 
 const STATUS_ARMED_TOPIC = 'paradox/status/armed';
 const SENSOR_MOTION_TOPIC_TEMPLATE = (index) => `paradox/sensor/${index}`;
+// Any failed poll earns a re-login, since what the panel answers once a session expired was never captured. At most
+// one per interval: each login ends whatever session the panel holds, and it holds only one.
+const RELOGIN_MIN_INTERVAL = 60 * 1000; // in milliseconds
 
 async function run() {
   const { zoneTuples } = await login();
@@ -77,13 +80,27 @@ async function run() {
 
     return Promise.all([
       new Promise((resolve) => server.close(resolve)),
-      logout,
+      logout(),
     ]);
   }
 
+  let reloggingIn = false;
+  let lastReloginAt = -Infinity;
   statusEvents.on('error', (error) => {
     console.error(error);
-    process.exit(1);
+    if (reloggingIn) return;
+    // Failing again so soon means a new session does not help: shut down as on a signal, then leave it to the restart
+    // policy. The shutdown also stops the polls, which would otherwise keep failing into this handler.
+    if (Date.now() - lastReloginAt < RELOGIN_MIN_INTERVAL) {
+      exitHandler().catch(console.error).finally(() => process.exit(1));
+      return;
+    }
+    reloggingIn = true;
+    lastReloginAt = Date.now();
+    login().then(() => { reloggingIn = false; }, (loginError) => {
+      console.error(loginError);
+      process.exit(1);
+    });
   });
   setupSignalHandler(exitHandler);
 }

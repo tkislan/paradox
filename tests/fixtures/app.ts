@@ -16,6 +16,9 @@ export const REACH_TIMEOUT_MS = 8000;
 
 export const READY_TIMEOUT_MS = 15000;
 
+// The bridge's poll interval: scenario steps move the fake clock at most this far at once.
+export const POLL_INTERVAL_MS = 1000;
+
 export const FAULTS: Record<string, PanelResult> = {
   http_500: { status: 500, headers: { 'Content-Type': 'text/plain' }, body: 'Internal Server Error' },
   reset: { destroy: true },

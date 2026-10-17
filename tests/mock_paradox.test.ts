@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ARMED, DISARMED, FakePanel } from './mock_paradox.ts';
+import { settle } from './support.ts';
 
 const get = (panel, path) => fetch(`http://${panel.hostname}${path}`);
 
@@ -21,6 +22,15 @@ describe('FakePanel', () => {
 
     const right = await (await get(panel, '/default.html?u=AA&p=BB')).text();
     expect(right).toContain('<title>Paradox IP Module</title>');
+    expect(panel.loggedIn).toBe(true);
+  });
+
+  it('answers accepted credentials with the configured default page and opens the session', async () => {
+    const panel = await new FakePanel({ sessionValue: 'S1', credentials: { S1: { u: 'AA', p: 'BB' } }, defaultPage: '<p>custom</p>' }).start();
+
+    const body = await (await get(panel, '/default.html?u=AA&p=BB')).text();
+
+    expect(body).toBe('<p>custom</p>');
     expect(panel.loggedIn).toBe(true);
   });
 
@@ -47,6 +57,17 @@ describe('FakePanel', () => {
 
     await get(panel, '/statuslive.html?area=00&value=d');
     expect(panel.useraccess).toEqual([DISARMED, 0]);
+  });
+
+  it('renders the alarm and trouble tables with quoted entries, empty until set', async () => {
+    const panel = await new FakePanel().start();
+
+    const before = await (await get(panel, '/statuslive.html')).text();
+    expect(before).toContain('tbl_alarmes = new Array();tbl_troubles = new Array();');
+
+    panel.setStatus({ alarms: ['1'], troubles: ['16', '38'] });
+    const after = await (await get(panel, '/statuslive.html')).text();
+    expect(after).toContain('tbl_alarmes = new Array("1");tbl_troubles = new Array("16","38");');
   });
 
   it('answers the login page for data pages while logged out when requireLogin is set', async () => {
@@ -84,5 +105,18 @@ describe('FakePanel', () => {
 
     await panel.stop();
     await expect(get(panel, '/logout.html')).rejects.toThrow();
+  });
+
+  it('can stall a response after the headers and the start of the body', async () => {
+    const panel = await new FakePanel().start();
+    panel.respondWith('/statuslive.html', { stall: '<html><head>' }, { times: 1 });
+
+    const response = await get(panel, '/statuslive.html');
+    const reader = response.body!.getReader();
+
+    expect(response.status).toBe(200);
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe('<html><head>');
+    expect(await Promise.race([reader.read(), settle().then(() => 'nothing more')])).toBe('nothing more');
+    await reader.cancel();
   });
 });

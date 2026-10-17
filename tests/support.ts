@@ -104,6 +104,21 @@ export function spyProcessExit() {
   return vi.spyOn(process, 'exit').mockImplementation((() => undefined) as () => never);
 }
 
+/**
+ * Swaps vitest's own handler out so the test can observe unhandled rejections instead of failing the run. Returns
+ * `seen`, the list they are collected in.
+ */
+export function captureUnhandledRejections(seen: unknown[] = []) {
+  const saved = process.listeners('unhandledRejection');
+  process.removeAllListeners('unhandledRejection');
+  process.on('unhandledRejection', (reason) => seen.push(reason));
+  onCleanup(() => {
+    process.removeAllListeners('unhandledRejection');
+    saved.forEach((listener) => process.on('unhandledRejection', listener));
+  });
+  return seen;
+}
+
 /** Removes listeners the code under test adds to `process`, so signal handlers do not leak between tests. */
 export function isolateProcessListeners(events: NodeJS.Signals[] = ['SIGHUP', 'SIGINT', 'SIGTERM']) {
   for (const event of events) {
