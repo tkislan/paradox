@@ -25,7 +25,7 @@ The tests are TypeScript that vitest runs as is (it strips the types, nothing is
 checks them together with `src/`, with the same settings: `strict`, but unannotated parameters allowed (`any`).
 `tests/package.json` marks them as ES modules, which they are under vitest.
 
-About 710 tests, 10 s. `npx vitest run --exclude 'tests/known_bugs/**'` skips the 37 that pin a defect. In agent/CI
+About 715 tests, 10 s. `npx vitest run --exclude 'tests/known_bugs/**'` skips the 37 that pin a defect. In agent/CI
 environments vitest may pick a reporter that hides console output; use `npx vitest run --reporter=default` to see
 whether a change made the suite noisy (it must stay silent).
 
@@ -38,7 +38,7 @@ versions production installs.
 
 ## Coverage
 
-95.3 % of lines, 97.0 % of branches. Dead code in `src/` is not covered: the `default:` case of the sensor handler
+95.4 % of lines, 97.1 % of branches. Dead code in `src/` is not covered: the `default:` case of the sensor handler
 (`app.js:46`, the value is always a boolean) and `initSensorStatus` (`status_listener.js:48-50`, never called).
 Deliberately without a test, because a Home Assistant integration has nothing like them: the REST API (`app.js`),
 signal handling (`signal.js`), the missing-variable check (`config.js`), MQTT connection failures (`mqtt_link.js`) and
@@ -73,9 +73,11 @@ system tests' cleanup, which calls the SIGTERM listener the bridge registered.
   `known_bugs/`, rows in `spec/known_bugs/`, tables only they use in `fixtures/known_bugs/`; `unit/known_bug_layout.test.ts`
   fails when one turns up elsewhere. The program has run for years, so these are improvements to consider rather
   than requirements: everything outside those paths is what a port has to meet, and a port decides per entry whether
-  to keep or fix the behavior (the catalog says what the sensible fix is). One entry cannot be kept apart, because
-  ordinary tests depend on it as well: KB-4 (after a start only differences are published, which most scenarios'
-  first poll assumes). A port that fixes it updates those tests along with it.
+  to keep or fix the behavior (the catalog says what the sensible fix is). Three entries cannot be kept apart, because
+  ordinary tests depend on them as well: KB-4 (after a start only differences are published, which most scenarios'
+  first poll assumes), KB-16 (the ordinary `mqtt_commands` rows send `arm` and `disarm` with an empty payload and
+  expect the command) and the command half of KB-18 (those rows and the concurrent-commands test in
+  `wire/alarm.test.ts` expect `area=00`). A port that fixes one of them updates those tests along with it.
 - **Test files hold test cases only.** Setup, assertion helpers, scenario interpreters and data tables live in `helpers/` and `fixtures/` (one module per test file, plus a few shared ones: `outcomes`, `responses`, `panel_faults`), which is what a port re-creates as `conftest.py` and helper modules; the test files then translate one to one.
 - **Black box at the lowest observable boundary**: HTTP requests/responses, MQTT messages, `process.exit` codes. No
   `vi.mock` of modules (it cannot intercept the CommonJS `require` graph and would tie tests to the implementation);
@@ -85,11 +87,11 @@ system tests' cleanup, which calls the SIGTERM listener the bridge registered.
   `{ "name", ...inputs, "expected", "known_bug"?, "note"? }`, and its format is in `spec/schemas.ts`. The JS test is a
   thin `it.each` loop, which is also what `pytest.mark.parametrize` over the same file looks like.
 - **Time**: the bridge's own timers (1 s poll, 3 s keep-alive, 5 s MQTT connect timeout, 1 s between index page
-  attempts at login, the 10 s timeout of every panel request) and its `Date` (a poll that fails less than 60 s after the
-  last new login started, once that login has finished, ends the bridge instead of logging in again) run on a fake clock
-  (`useFakeClock`); sockets are real. The bridge skips a tick while its last poll is unanswered, and in one long jump
-  of the clock the sockets fall behind, so the scenario steps move it one poll interval at a time and let the panel
-  answer in between.
+  attempts at login, the 10 s deadline of every panel request, which covers the whole exchange, headers and body) and
+  its `Date` (a poll that fails less than 60 s after the last new login started, once that login has finished, ends the
+  bridge instead of logging in again) run on a fake clock (`useFakeClock`); sockets are real. The bridge skips a tick
+  while its last poll is unanswered, and in one long jump of the clock the sockets fall behind, so the scenario steps
+  move it one poll interval at a time and let the panel answer in between.
   Wait for effects with `waitFor`; `settle()` is only for "nothing happened" assertions, and with a broker only after
   `broker.barrier()`.
 - **Isolation**: `setBridgeEnv()` before `require`-ing a module from `src/` (config.js reads the environment once at
@@ -131,9 +133,12 @@ projects), then the parsing tables (`status_pages`, `login_cases`), then `status
   names the table without an assignment in the expected format fails like the other tables.
 - `panel_requests_ignored` in a scenario step names requests the row takes no side on: the poll of a tick that falls
   on the same millisecond as a request timeout.
-- Error strings that come from axios or V8 (`Request failed with status code 500`, `timeout of 10000ms exceeded`,
-  `socket hang up`) are not portable; only the fact of failing is, and for a timeout when it fails. The bridge's own
-  messages (`Login failed`, ...) are.
+- Error strings that come from axios or V8 (`Request failed with status code 500`, `socket hang up`) are not portable;
+  only the fact of failing is. The bridge's own messages (`Login failed`, `timeout of 10000ms exceeded`, ...) are. That
+  timeout is a deadline on the whole exchange, headers and body, counted from the call: a panel that sends the headers
+  and then stalls in the body fails at 10000 ms too, which a client library's own timeout may not cover (axios 0.18's
+  stops at the headers). The deadline also closes the connection, so a panel that keeps stalling is not left with one
+  more open connection per timeout.
 - Log the panel session out when the integration is unloaded, as the bridge's shutdown handler does. The suite checks
   that logout only where the bridge gives up after a new login did not help (`failures` in `system_scenarios.json`);
   the signal path, the counterpart of unloading, has no test, so a port that forgets the logout on unload still passes
@@ -144,7 +149,7 @@ projects), then the parsing tables (`status_pages`, `login_cases`), then `status
 | `spec/*.json` + `it.each` | the same files + `pytest.mark.parametrize` |
 | `spec/schemas.ts` (zod) | pydantic models of the same files |
 | `crypto_reference.py` | start of the client library; `python3 -I spec/crypto_reference.py` checks all vectors |
-| `FakePanel.handle(request)` | an `aioclient_mock` callback or `aiohttp` test server around the same function |
+| `FakePanel.handle(request)` | an `aioclient_mock` callback or `aiohttp` test server around the same function; the `stall` fault (the headers and the start of a body, then the response left open) and the check that a timed-out request closes its connection need the test server |
 | `FakePanel.requestLines` assertions | the exact URLs the client must request, in order |
 | Mosquitto fixtures | only if the port keeps MQTT; Home Assistant has its own MQTT test helpers (`mqtt_mock`) |
 

@@ -126,4 +126,10 @@ describe.each(COMMANDS)('%s() outcome', (command) => {
 
     await expectTimeout(api.panel, '/statuslive.html', api[command]);
   });
+
+  it('rejects 10000 ms after the call when the panel stalls halfway through the body', async () => {
+    const api = await startBridge();
+
+    await expectTimeout(api.panel, '/statuslive.html', api[command], { stall: '<html><head>' });
+  });
 });

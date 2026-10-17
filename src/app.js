@@ -88,7 +88,6 @@ async function run() {
   let lastReloginAt = -Infinity;
   statusEvents.on('error', (error) => {
     console.error(error);
-    // Polls keep failing until the new session exists.
     if (reloggingIn) return;
     // Failing again so soon means a new session does not help: shut down as on a signal, then leave it to the restart
     // policy. The shutdown also stops the polls, which would otherwise keep failing into this handler.

@@ -1,5 +1,6 @@
 import { inspect } from 'node:util';
 import { expect } from 'vitest';
+import type { PanelResult } from '../mock_paradox.ts';
 import { settle, useFakeClock, waitFor } from '../support.ts';
 
 /** The reason `promise` rejects with, whatever was thrown. */
@@ -23,11 +24,12 @@ export function track(promise) {
 }
 
 /**
- * Calls `call` on a fake clock while the panel leaves every request to `pathname` unanswered, and checks that the call
- * rejects 10000 ms after it was made, not a millisecond earlier, having sent that one request.
+ * Calls `call` on a fake clock while the panel answers every request to `pathname` with `fault` (by default it never
+ * answers), and checks that the call rejects 10000 ms after it was made, not a millisecond earlier, having sent that
+ * one request, and that the connection to the panel is then closed.
  */
-export async function expectTimeout(panel, pathname: string, call: () => Promise<unknown>) {
-  panel.respondWith(pathname, { hang: true });
+export async function expectTimeout(panel, pathname: string, call: () => Promise<unknown>, fault: PanelResult = { hang: true }) {
+  panel.respondWith(pathname, fault);
   const clock = useFakeClock();
   const outcome = track(call());
   await waitFor(() => panel.requestsTo(pathname).length === 1, { message: `the request to ${pathname}` });
@@ -41,11 +43,12 @@ export async function expectTimeout(panel, pathname: string, call: () => Promise
   expect(outcome.state).toBe('rejected');
   expect(outcome.error.message).toBe('timeout of 10000ms exceeded');
   expect(panel.requests).toHaveLength(1);
+  await waitFor(() => panel.sockets.size === 0, { message: 'the panel connection to close' });
 }
 
 /** Fails if the hashed panel credentials show up anywhere in `value`, however deeply nested. */
 export function expectNoCredentials(value, { u, p }: { u: string; p: string }) {
-  const text = inspect(value, { depth: null });
+  const text = inspect(value, { depth: null, maxArrayLength: Infinity, maxStringLength: Infinity, showHidden: true });
 
   expect(text).not.toContain(u);
   expect(text).not.toContain(p);

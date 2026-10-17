@@ -8,11 +8,9 @@ const { getJsValue } = require('../util');
 
 const STATUSZONE_VALUE_RE = /tbl_statuszone[ ]+=[ ]+(new Array\((?:\d,?)*\))/m;
 const USERACCESS_VALUE_RE = /tbl_useraccess[ ]+=[ ]+(new Array\((?:\d,?)*\))/m;
-// The comma between entries is required: with every separator optional, a long run of digits that then fails to
-// match is retried in every way it can be split, which takes minutes and blocks the poll.
 const ALARMS_VALUE_RE = /tbl_alarmes[ ]+=[ ]+(new Array\((?:(?:"\d+"|\d+)(?:,(?:"\d+"|\d+))*,?)?\))/m;
 const TROUBLES_VALUE_RE = /tbl_troubles[ ]+=[ ]+(new Array\((?:(?:"\d+"|\d+)(?:,(?:"\d+"|\d+))*,?)?\))/m;
-// Without a session the panel answers with its login page and HTTP 200.
+// Assumed, never captured: without a session the panel answers with its login page and HTTP 200.
 const LOGIN_PAGE_RE = /loginaff\(/;
 
 

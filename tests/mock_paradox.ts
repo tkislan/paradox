@@ -22,7 +22,8 @@ import { onCleanup } from './support.ts';
  * builds on is that an expired session gets the login page: commands and the keep-alive fail on it.
  *
  * `handle()` is pure (request in, response out) so the same contract can be ported to any HTTP mock;
- * `start()` wraps it in a real HTTP server on loopback.
+ * `start()` wraps it in a real HTTP server on loopback. The `stall` fault and `sockets` exist only at that level, so a
+ * port needs a real test server for them, not a mock that returns whole responses.
  */
 
 const DATA_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'data');
@@ -83,11 +84,15 @@ export type PanelRequest = {
   headers: http.IncomingHttpHeaders;
 };
 
-/** What the panel answers: a response, or a transport fault (`destroy` resets the socket, `hang` never answers). */
+/**
+ * What the panel answers: a response, or a transport fault (`destroy` resets the socket, `hang` never answers, `stall`
+ * sends a 200 status line, the headers and the given start of a body, then neither finishes nor closes).
+ */
 export type PanelResult =
-  | { status: number; headers: Record<string, string>; body: string; destroy?: never; hang?: never }
-  | { destroy: true; hang?: never }
-  | { hang: true; destroy?: never };
+  | { status: number; headers: Record<string, string>; body: string; destroy?: never; hang?: never; stall?: never }
+  | { destroy: true; hang?: never; stall?: never }
+  | { hang: true; destroy?: never; stall?: never }
+  | { stall: string; destroy?: never; hang?: never };
 
 type Override = { pathname: string; response: PanelResult | ((request: PanelRequest) => PanelResult); times: number };
 
@@ -181,7 +186,8 @@ export class FakePanel {
   /**
    * Answers the next `times` requests for `pathname` with `response` instead of the normal behaviour.
    * `response` is a handle() result, a function (request) => result, or a transport fault:
-   * { destroy: true } resets the socket, { hang: true } never answers.
+   * { destroy: true } resets the socket, { hang: true } never answers, { stall: '<body prefix>' } sends a 200 status
+   * line, the headers and that prefix, then neither finishes nor closes.
    */
   respondWith(pathname: string, response: Override['response'], { times = Infinity } = {}) {
     this.overrides.push({ pathname, response, times });
@@ -247,6 +253,11 @@ export class FakePanel {
       const result = this.handle(request);
       if (result.hang) return;
       if (result.destroy) return req.socket.destroy();
+      if (result.stall !== undefined) {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.write(result.stall);
+        return;
+      }
 
       res.writeHead(result.status, result.headers);
       res.end(result.body);

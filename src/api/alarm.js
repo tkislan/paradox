@@ -8,7 +8,7 @@ const AREA = '00';
 const ARM = 'r';
 const DISARM = 'd';
 
-// Without a session the panel answers with its login page and HTTP 200, having done nothing.
+// Assumed, never captured: without a session the panel answers with its login page and HTTP 200.
 const LOGIN_PAGE_RE = /loginaff\(/;
 
 /** @param {string} value */

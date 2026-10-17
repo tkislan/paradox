@@ -19,15 +19,19 @@ describe('getStatus() page parsing', () => {
     expect(error.name).toBe('SyntaxError');
   });
 
-  it('rejects a long run of digits that ends in garbage at once, instead of retrying every way to split it', async () => {
+  it.each([
+    ['tbl_alarmes', `tbl_alarmes = new Array(${'1'.repeat(30)}a);tbl_troubles = new Array();`],
+    ['tbl_troubles', `tbl_alarmes = new Array();tbl_troubles = new Array(${'1'.repeat(30)}a);`],
+  ])('rejects a long run of digits in %s that ends in garbage at once, instead of retrying every way to split it', async (_table, tables) => {
     const { panel, getStatus } = await startBridge();
-    panel.respondWith('/statuslive.html', html(`tbl_statuszone = new Array(1,0);var stayd="0";tbl_useraccess = new Array(1,0);tbl_alarmes = new Array();tbl_troubles = new Array(${'1'.repeat(30)}a);`));
+    panel.respondWith('/statuslive.html', html(`tbl_statuszone = new Array(1,0);var stayd="0";tbl_useraccess = new Array(1,0);${tables}`));
 
     const started = performance.now();
     const error = await rejection(getStatus());
 
     expect(error.message).toBe("Regex didn't match the value");
-    // A pattern with every separator optional needs about 4 s for these 30 digits, and 4 times as long per 2 more.
+    // A pattern with every separator optional needs about 4 s for these 30 digits, and 4 times as long per 2 more;
+    // about 30 s when this is the pattern's first run, which V8 interprets instead of compiling, as when run alone.
     expect(performance.now() - started).toBeLessThan(1000);
   });
 });
@@ -155,6 +159,12 @@ describe.each(OPERATIONS)('%s() transport', (operation, pathname) => {
     const api = await startBridge();
 
     await expectTimeout(api.panel, pathname, api[operation]);
+  });
+
+  it('rejects 10000 ms after the call when the panel stalls halfway through the body', async () => {
+    const api = await startBridge();
+
+    await expectTimeout(api.panel, pathname, api[operation], { stall: '<html><head>' });
   });
 });
 

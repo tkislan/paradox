@@ -36,8 +36,6 @@ function getJsValue(content, regexp) {
   }
 
   if (!match[1]) return undefined;
-  // The page comes off the network, so it is parsed as data, never run. JSON has no `new Array(...)` and,
-  // unlike JavaScript, rejects a trailing comma.
   return JSON.parse(match[1].replace(/^new Array\(([\s\S]*?),?\)$/, '[$1]'));
 }
 

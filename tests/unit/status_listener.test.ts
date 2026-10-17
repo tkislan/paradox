@@ -137,6 +137,26 @@ describe('failed polls', () => {
     expect(errors[0]).toMatchObject({ message: 'timeout of 10000ms exceeded' });
   });
 
+  it('a body that stops halfway: emits the timeout error 10000 ms after the poll was sent, and the next tick polls again', async () => {
+    const { panel, events, errors, clock, tick } = await startListener(ZONES);
+    panel.respondWith(POLL, { stall: '<html><head>' }, { times: 1 });
+
+    await tick();
+    await clock.advance(9999);
+    await settle();
+    expect(errors).toEqual([]);
+
+    await clock.advance(1);
+    await waitFor(() => errors.length === 1, { message: 'the timeout error' });
+    expect(errors[0]).toMatchObject({ message: 'timeout of 10000ms exceeded' });
+
+    // The tick on the deadline's millisecond may poll or be skipped (README), so this waits for an answered poll
+    // instead of counting polls.
+    await clock.advance(1000);
+    await waitFor(() => events.length === 2, { message: 'a poll to be answered' });
+    expect(events).toEqual([['error'], ['armedChanged', false]]);
+  });
+
   it('reports a failure through the error event only: nothing is rejected', async () => {
     const { panel, errors, tick } = await startListener(ZONES);
     const unhandled = captureUnhandledRejections();

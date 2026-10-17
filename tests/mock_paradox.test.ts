@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ARMED, DISARMED, FakePanel } from './mock_paradox.ts';
+import { settle } from './support.ts';
 
 const get = (panel, path) => fetch(`http://${panel.hostname}${path}`);
 
@@ -104,5 +105,18 @@ describe('FakePanel', () => {
 
     await panel.stop();
     await expect(get(panel, '/logout.html')).rejects.toThrow();
+  });
+
+  it('can stall a response after the headers and the start of the body', async () => {
+    const panel = await new FakePanel().start();
+    panel.respondWith('/statuslive.html', { stall: '<html><head>' }, { times: 1 });
+
+    const response = await get(panel, '/statuslive.html');
+    const reader = response.body!.getReader();
+
+    expect(response.status).toBe(200);
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe('<html><head>');
+    expect(await Promise.race([reader.read(), settle().then(() => 'nothing more')])).toBe('nothing more');
+    await reader.cancel();
   });
 });
