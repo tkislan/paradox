@@ -92,24 +92,24 @@ describe('failed polls', () => {
     expect(logs.error).toEqual([[errors[0]]]);
   });
 
-  it('connection refused: emits the connection error', async () => {
-    const { panel, errors, tick } = await startListener(ZONES);
+  it('connection refused: logs the connection error and emits none', async () => {
+    const { panel, errors, logs, tick } = await startListener(ZONES);
     await injectFailure(panel, POLL, { connection: 'refused' });
 
     await tick();
 
-    expect(errors).toHaveLength(1);
-    expect(errors[0]).toMatchObject({ code: 'ECONNREFUSED' });
+    expect(logs.error).toEqual([[expect.objectContaining({ code: 'ECONNREFUSED' })]]);
+    expect(errors).toEqual([]);
   });
 
-  it('connection reset: emits the connection error', async () => {
-    const { panel, errors, tick } = await startListener(ZONES);
+  it('connection reset: logs the connection error and emits none', async () => {
+    const { panel, errors, logs, tick } = await startListener(ZONES);
     await injectFailure(panel, POLL, { connection: 'reset' });
 
     await tick();
 
-    expect(errors).toHaveLength(1);
-    expect(errors[0]).toMatchObject({ code: 'ECONNRESET' });
+    expect(logs.error).toEqual([[expect.objectContaining({ code: 'ECONNRESET' })]]);
+    expect(errors).toEqual([]);
   });
 
   it('unparseable page: emits the parse error after the parser has logged the page and the pattern', async () => {
@@ -123,38 +123,40 @@ describe('failed polls', () => {
     expect(logs.error.map(([first]) => first)).toEqual(['nothing to see', expect.stringContaining('tbl_statuszone'), errors[0]]);
   });
 
-  it('no answer: emits the timeout error 10000 ms after the poll was sent, not a millisecond earlier', async () => {
-    const { panel, errors, clock, tick } = await startListener(ZONES);
+  it('no answer: logs the timeout error 20000 ms after the poll was sent, not a millisecond earlier, and emits none', async () => {
+    const { panel, errors, logs, clock, tick } = await startListener(ZONES);
     panel.respondWith(POLL, { hang: true }, { times: 1 });
 
     await tick();
-    await clock.advance(9999);
+    await clock.advance(19999);
     await settle();
-    expect(errors).toEqual([]);
+    expect(logs.error).toEqual([]);
 
     await clock.advance(1);
-    await waitFor(() => errors.length === 1, { message: 'the timeout error' });
-    expect(errors[0]).toMatchObject({ message: 'timeout of 10000ms exceeded' });
+    await waitFor(() => logs.error.length === 1, { message: 'the timeout error' });
+    expect(logs.error[0][0]).toMatchObject({ message: 'timeout of 20000ms exceeded' });
+    await settle();
+    expect(errors).toEqual([]);
   });
 
-  it('a body that stops halfway: emits the timeout error 10000 ms after the poll was sent, and the next tick polls again', async () => {
-    const { panel, events, errors, clock, tick } = await startListener(ZONES);
+  it('a body that stops halfway: logs the timeout error 20000 ms after the poll was sent, emits none, and the next tick polls again', async () => {
+    const { panel, events, logs, clock, tick } = await startListener(ZONES);
     panel.respondWith(POLL, { stall: '<html><head>' }, { times: 1 });
 
     await tick();
-    await clock.advance(9999);
+    await clock.advance(19999);
     await settle();
-    expect(errors).toEqual([]);
+    expect(logs.error).toEqual([]);
 
     await clock.advance(1);
-    await waitFor(() => errors.length === 1, { message: 'the timeout error' });
-    expect(errors[0]).toMatchObject({ message: 'timeout of 10000ms exceeded' });
+    await waitFor(() => logs.error.length === 1, { message: 'the timeout error' });
+    expect(logs.error[0][0]).toMatchObject({ message: 'timeout of 20000ms exceeded' });
 
     // The tick on the deadline's millisecond may poll or be skipped (README), so this waits for an answered poll
     // instead of counting polls.
     await clock.advance(1000);
-    await waitFor(() => events.length === 2, { message: 'a poll to be answered' });
-    expect(events).toEqual([['error'], ['armedChanged', false]]);
+    await waitFor(() => events.length === 1, { message: 'a poll to be answered' });
+    expect(events).toEqual([['armedChanged', false]]);
   });
 
   it('reports a failure through the error event only: nothing is rejected', async () => {
@@ -186,9 +188,57 @@ describe('failed polls', () => {
   });
 });
 
+describe('polls the panel does not answer', () => {
+  it('emit no error for 60000 ms from the first of them; the first one after that emits it, and the count starts again', async () => {
+    const { panel, errors, tick } = await startListener(ZONES);
+    panel.respondWith(POLL, { destroy: true });
+
+    for (let poll = 1; poll <= 60; poll += 1) await tick();
+    expect(errors).toEqual([]);
+
+    await tick();
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatchObject({ code: 'ECONNRESET' });
+
+    for (let poll = 1; poll <= 60; poll += 1) await tick();
+    expect(errors).toHaveLength(1);
+
+    await tick();
+    expect(errors).toHaveLength(2);
+  });
+
+  it('a poll the panel answers ends the run: the 60000 ms count starts again at the next unanswered one', async () => {
+    const { panel, events, tick } = await startListener(ZONES);
+    panel.respondWith(POLL, { destroy: true }, { times: 59 });
+    for (let poll = 1; poll <= 59; poll += 1) await tick();
+
+    await tick();
+    expect(events).toEqual([['armedChanged', false]]);
+
+    panel.respondWith(POLL, { destroy: true });
+    for (let poll = 1; poll <= 60; poll += 1) await tick();
+    expect(events).toEqual([['armedChanged', false]]);
+  });
+
+  it('a poll answered with an HTTP error emits it at once, also during a run of unanswered ones, and the count starts again', async () => {
+    const { panel, errors, tick } = await startListener(ZONES);
+    panel.respondWith(POLL, { destroy: true }, { times: 3 });
+    for (let poll = 1; poll <= 3; poll += 1) await tick();
+
+    await injectFailure(panel, POLL, { status: 500 });
+    await tick();
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatchObject({ response: { status: 500 } });
+
+    panel.respondWith(POLL, { destroy: true });
+    for (let poll = 1; poll <= 60; poll += 1) await tick();
+    expect(errors).toHaveLength(1);
+  });
+});
+
 describe('hung and slow panels', () => {
   it('while the panel does not answer, the ticks are skipped: one poll stays pending until it fails', async () => {
-    const { panel, events, clock, tick } = await startListener(ZONES);
+    const { panel, events, logs, clock, tick } = await startListener(ZONES);
     panel.respondWith(POLL, { hang: true });
     await tick();
 
@@ -198,10 +248,24 @@ describe('hung and slow panels', () => {
     expect(events).toEqual([]);
 
     await panel.stop();
-    await waitFor(() => events.length === 1, { message: 'the dropped connection to surface' });
-    // The panel is gone, so this poll is refused: its error is what shows that the tick polled.
+    await waitFor(() => logs.error.length === 1, { message: 'the dropped connection to surface' });
+    // The panel is gone, so this poll is refused: its logged error is what shows that the tick polled.
     await tick();
-    expect(events).toEqual([['error'], ['error']]);
+    expect(logs.error).toHaveLength(2);
+    expect(events).toEqual([]);
+  });
+
+  it('an answer 19999 ms after the poll was sent is still applied', async () => {
+    const { panel, events, logs, clock, tick } = await startListener(ZONES);
+    const slow = holdNextResponse(panel, POLL);
+    await tick();
+
+    await clock.advance(19999);
+    slow.release();
+
+    await waitFor(() => events.length === 1, { message: 'the slow answer to be applied' });
+    expect(events).toEqual([['armedChanged', false]]);
+    expect(logs.error).toEqual([]);
   });
 
   it('a slow answer holds back the next poll, so no answer can arrive after a newer one', async () => {
@@ -242,15 +306,16 @@ describe('exceptions inside a poll', () => {
     const { panel, logs, statusListener, tick } = await boot();
     const unhandled = captureUnhandledRejections();
     const listener = statusListener(ZONES);
-    panel.respondWith(POLL, { hang: true }, { times: 1 });
+    await injectFailure(panel, POLL, { status: 500 });
+    const held = holdNextResponse(panel, POLL);
     await tick();
 
     listener.stop();
-    await panel.stop();
+    held.release();
     await waitFor(() => logs.error.length > 0, { message: 'the failed poll to be logged' });
     await settle();
 
-    expect(logs.error[0]).toEqual([expect.objectContaining({ code: 'ECONNRESET' })]);
+    expect(logs.error[0]).toEqual([expect.objectContaining({ response: expect.objectContaining({ status: 500 }) })]);
     expect(unhandled).toEqual([]);
   });
 

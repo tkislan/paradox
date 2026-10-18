@@ -1,5 +1,5 @@
 {
-  "_comment": "Scenarios for src/api/login.js: login() is run against a fake panel and must resolve to expected.zoneTuples or reject with expected.error (exact message). Unless a row says otherwise the panel behaves like mock_paradox.ts with session value 91AC25D06A0C26BA, accepts the u/p of crypto.json 'sample session, 4 digit code' (username user, password 1234) and lists the six sample zones. 'panel' overrides the answer for one request path: a response or a list of responses used in order; each response is {file} (relative to tests/), {body}, {status[, headers][, body]} (200, no extra headers and an empty body when omitted), {zones} (the index page with these [area bitmask, name] slots, padded to 32 slots with [0, ' '] like the real panel), {zones_by_slot} (the same, sparse: slot index -> [area bitmask, name]), {destroy} (the connection is reset) or {hang} (never answered); 'times' limits how often a response is used (forever when omitted). 'expected.default_query' is the exact query string of the first /default.html request. 'expected.request_counts' is how often the panel was asked for each path (a path that is not listed was never asked; one request to each of /logout.html, /login_page.html, /default.html and /index.html when the whole object is omitted). A login that fails after the panel accepted the credentials logs out again, so such rows count two /logout.html requests. 'expected.warnings' are the messages logged with console.warn (none when omitted). index_retry rows run on a fake clock: 'expected.index_at_ms' is when each /index.html request is made, in ms from the first one; a request may not come a millisecond earlier, and login() settles right after the last one without waiting further. hangs rows run on a fake clock too, against a panel that leaves some requests unanswered: each of them fails 10000 ms after it was sent. Their 'expected.requests' lists every request the panel receives, in order, as [ms after login() was called, path], and 'expected.settles_at_ms' is when login() settles; neither may come a millisecond earlier. Error messages starting with 'Request failed' come from axios and 'socket hang up' / 'connect ECONNREFUSED' from Node's http client: a port only has to fail there. 'timeout of 10000ms exceeded' is the bridge's own.",
+  "_comment": "Scenarios for src/api/login.js: login() is run against a fake panel and must resolve to expected.zoneTuples or reject with expected.error (exact message). Unless a row says otherwise the panel behaves like mock_paradox.ts with session value 91AC25D06A0C26BA, accepts the u/p of crypto.json 'sample session, 4 digit code' (username user, password 1234) and lists the six sample zones. 'panel' overrides the answer for one request path: a response or a list of responses used in order; each response is {file} (relative to tests/), {body}, {status[, headers][, body]} (200, no extra headers and an empty body when omitted), {zones} (the index page with these [area bitmask, name] slots, padded to 32 slots with [0, ' '] like the real panel), {zones_by_slot} (the same, sparse: slot index -> [area bitmask, name]), {destroy} (the connection is reset) or {hang} (never answered); 'times' limits how often a response is used (forever when omitted). 'expected.default_query' is the exact query string of the first /default.html request. 'expected.request_counts' is how often the panel was asked for each path (a path that is not listed was never asked; one request to each of /logout.html, /login_page.html, /default.html and /index.html when the whole object is omitted). A login that fails after the panel accepted the credentials logs out again, so such rows count two /logout.html requests. 'expected.warnings' are the messages logged with console.warn (none when omitted). index_retry rows run on a fake clock: 'expected.index_at_ms' is when each /index.html request is made, in ms from the first one; a request may not come a millisecond earlier, and login() settles right after the last one without waiting further. hangs rows run on a fake clock too, against a panel that leaves some requests unanswered: each of them fails 20000 ms after it was sent. Their 'expected.requests' lists every request the panel receives, in order, as [ms after login() was called, path], and 'expected.settles_at_ms' is when login() settles; neither may come a millisecond earlier. Error messages starting with 'Request failed' come from axios and 'socket hang up' / 'connect ECONNREFUSED' from Node's http client: a port only has to fail there. 'timeout of 20000ms exceeded' is the bridge's own.",
 
   "login": [
     {
@@ -791,7 +791,7 @@
 
   "hangs": [
     {
-      "name": "a logout that is not answered fails after 10000 ms with a warning, and the login goes on",
+      "name": "a logout that is not answered fails after 20000 ms with a warning, and the login goes on",
       "panel": { "/logout.html": { "hang": true } },
       "expected": {
         "zoneTuples": [
@@ -801,44 +801,44 @@
           [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "], [0, " "]
         ],
         "warnings": ["Logout before login failed"],
-        "requests": [[0, "/logout.html"], [10000, "/login_page.html"], [10000, "/default.html"], [10000, "/index.html"]],
-        "settles_at_ms": 10000
+        "requests": [[0, "/logout.html"], [20000, "/login_page.html"], [20000, "/default.html"], [20000, "/index.html"]],
+        "settles_at_ms": 20000
       }
     },
     {
-      "name": "a login page request that is not answered rejects after 10000 ms",
+      "name": "a login page request that is not answered rejects after 20000 ms",
       "panel": { "/login_page.html": { "hang": true } },
       "expected": {
-        "error": "timeout of 10000ms exceeded",
+        "error": "timeout of 20000ms exceeded",
         "requests": [[0, "/logout.html"], [0, "/login_page.html"]],
-        "settles_at_ms": 10000
+        "settles_at_ms": 20000
       }
     },
     {
-      "name": "a default.html request that is not answered rejects after 10000 ms",
+      "name": "a default.html request that is not answered rejects after 20000 ms",
       "panel": { "/default.html": { "hang": true } },
       "expected": {
-        "error": "timeout of 10000ms exceeded",
+        "error": "timeout of 20000ms exceeded",
         "requests": [[0, "/logout.html"], [0, "/login_page.html"], [0, "/default.html"]],
-        "settles_at_ms": 10000
+        "settles_at_ms": 20000
       }
     },
     {
-      "name": "an index page that is never answered: each of eleven attempts times out after 10000 ms and the next follows 1000 ms later, then the session is logged out",
+      "name": "an index page that is never answered: each of eleven attempts times out after 20000 ms and the next follows 1000 ms later, then the session is logged out",
       "panel": { "/index.html": { "hang": true } },
       "expected": {
-        "error": "timeout of 10000ms exceeded",
+        "error": "timeout of 20000ms exceeded",
         "requests": [
           [0, "/logout.html"], [0, "/login_page.html"], [0, "/default.html"], [0, "/index.html"],
-          [11000, "/index.html"], [22000, "/index.html"], [33000, "/index.html"], [44000, "/index.html"], [55000, "/index.html"],
-          [66000, "/index.html"], [77000, "/index.html"], [88000, "/index.html"], [99000, "/index.html"], [110000, "/index.html"],
-          [120000, "/logout.html"]
+          [21000, "/index.html"], [42000, "/index.html"], [63000, "/index.html"], [84000, "/index.html"], [105000, "/index.html"],
+          [126000, "/index.html"], [147000, "/index.html"], [168000, "/index.html"], [189000, "/index.html"], [210000, "/index.html"],
+          [230000, "/logout.html"]
         ],
-        "settles_at_ms": 120000
+        "settles_at_ms": 230000
       }
     },
     {
-      "name": "a panel that answers nothing: the logout fails after 10000 ms with a warning, then the login page request fails 10000 ms later",
+      "name": "a panel that answers nothing: the logout fails after 20000 ms with a warning, then the login page request fails 20000 ms later",
       "panel": {
         "/logout.html": { "hang": true },
         "/login_page.html": { "hang": true },
@@ -846,10 +846,10 @@
         "/index.html": { "hang": true }
       },
       "expected": {
-        "error": "timeout of 10000ms exceeded",
+        "error": "timeout of 20000ms exceeded",
         "warnings": ["Logout before login failed"],
-        "requests": [[0, "/logout.html"], [10000, "/login_page.html"]],
-        "settles_at_ms": 20000
+        "requests": [[0, "/logout.html"], [20000, "/login_page.html"]],
+        "settles_at_ms": 40000
       }
     }
   ],

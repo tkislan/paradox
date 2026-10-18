@@ -3,7 +3,13 @@
 const EventEmitter = require('events');
 
 const { getStatus } = require('./api/status');
+const { isUnanswered } = require('./api/http_client');
 const { deepArrayEqual } = require('./util');
+
+// The panel stops accepting connections for seconds at a time, which says nothing about its session: polls it does
+// not answer are only logged until this long after the first of them, then the error is reported (app.js logs in
+// again on it).
+const UNANSWERED_GRACE = 60 * 1000; // in milliseconds
 
 // Names from the panel's own scripts; captured pages confirm only 1 and 7. In alarm (3) stays unknown: an alarm
 // while disarmed is possible, and the armed topic has no value for it.
@@ -80,15 +86,21 @@ function statusListener(zoneTuples) {
   }
   
   let prevRawStatus = { statuszone: [], useraccess: [], alarms: [], troubles: [] };
+  /** @type {number | null} */
+  let failingSince = null;
   async function poll() {
     let rawStatus;
     try {
       rawStatus = await getStatus();
     } catch (error) {
       console.error(error);
+      failingSince ??= Date.now();
+      if (isUnanswered(error) && Date.now() - failingSince < UNANSWERED_GRACE) return;
+      failingSince = null;
       statusEventEmitter.emit('error', error);
       return;
     }
+    failingSince = null;
 
     for (const key of ['statuszone', 'useraccess', 'alarms', 'troubles']) {
       if (!deepArrayEqual(prevRawStatus[key], rawStatus[key])) {
