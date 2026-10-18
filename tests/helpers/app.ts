@@ -103,6 +103,7 @@ export async function createBridge({ panel: panelSpec = {}, broker: brokerSpec =
     seen: { published: 0, requests: 0, exits: 0, errors: 0 },
     hungRequests: (panelSpec.faults ?? []).some((fault) => fault.kind === 'hang'),
     load: () => require('../../src/app.js'),
+    terminate: () => shutdownHandlers().forEach((handler) => handler('SIGTERM')),
     awaitReady: () => waitFor(() => bridgeMqtt.subscribed.length === 2, {
       timeout: READY_TIMEOUT_MS, interval: WAIT_INTERVAL_MS, message: 'the bridge to subscribe to both command topics',
     }),
@@ -159,6 +160,7 @@ async function advance(world: World, ms: number) {
 
 async function perform(world: World, step: Step) {
   if (step.panel_status) world.panel.setStatus(step.panel_status);
+  if (step.panel_zones) world.panel.zones = step.panel_zones;
   if (step.panel_fault) {
     addFault(world.panel, step.panel_fault);
     world.hungRequests ||= step.panel_fault.kind === 'hang';

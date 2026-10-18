@@ -115,8 +115,9 @@ function statusListener(zoneTuples) {
   }
 
   let polling = false;
+  let paused = false;
   const intervalId = setInterval(() => {
-    if (polling) return;
+    if (polling || paused) return;
     polling = true;
     // emit() throws for an 'error' nobody listens to (none at all after stop()) and rethrows a listener's exception.
     poll().catch(console.error).finally(() => { polling = false; });
@@ -124,6 +125,11 @@ function statusListener(zoneTuples) {
 
   return {
     on: /** @param {[string | symbol, (...args: any[]) => void]} args */ (...args) => statusEventEmitter.on(...args),
+    pause: () => { paused = true; },
+    resume: /** @param {Array<[number, string]>} zones */ (zones) => {
+      zoneTuples = zones;
+      paused = false;
+    },
     stop: () => {
       clearInterval(intervalId);
       statusEventEmitter.removeAllListeners();

@@ -38,13 +38,14 @@ versions production installs.
 
 ## Coverage
 
-95.4 % of lines, 97.1 % of branches. Dead code in `src/` is not covered: the `default:` case of the sensor handler
+95.7 % of lines, 97.1 % of branches. Dead code in `src/` is not covered: the `default:` case of the sensor handler
 (`app.js:46`, the value is always a boolean) and `initSensorStatus` (`status_listener.js:48-50`, never called).
 Deliberately without a test, because a Home Assistant integration has nothing like them: the REST API (`app.js`),
 signal handling (`signal.js`), the missing-variable check (`config.js`), MQTT connection failures (`mqtt_link.js`) and
 the `playground.js` script. The shutdown handler in `app.js`, which a signal calls, is also what the bridge runs before
 it exits when a new login did not help, and the `failures` scenarios test it there: it logs the panel session out, no
 poll or keep-alive follows, and the exit waits for the logout. That it closes the REST server is not checked.
+`shutdown` in `system/app.test.ts` calls the SIGTERM listener directly, to test the handler during a new login.
 `config.js`, `mqtt_link.js`, `keep_alive_worker.js` and `signal.js` have no tests of their own; the system tests only
 run them, so they show as covered even where no assertion would notice a changed value. For `signal.js` that is the
 system tests' cleanup, which calls the SIGTERM listener the bridge registered.
@@ -90,8 +91,8 @@ system tests' cleanup, which calls the SIGTERM listener the bridge registered.
   attempts at login, the 10 s deadline of every panel request, which covers the whole exchange, headers and body) and
   its `Date` (a poll that fails less than 60 s after the last new login started, once that login has finished, ends the
   bridge instead of logging in again) run on a fake clock (`useFakeClock`); sockets are real. The bridge skips a tick
-  while its last poll is unanswered, and in one long jump of the clock the sockets fall behind, so the scenario steps
-  move it one poll interval at a time and let the panel answer in between.
+  while its last poll is unanswered or a new login is pending, and in one long jump of the clock the sockets fall
+  behind, so the scenario steps move it one poll interval at a time and let the panel answer in between.
   Wait for effects with `waitFor`; `settle()` is only for "nothing happened" assertions, and with a broker only after
   `broker.barrier()`.
 - **Isolation**: `setBridgeEnv()` before `require`-ing a module from `src/` (config.js reads the environment once at
@@ -139,10 +140,10 @@ projects), then the parsing tables (`status_pages`, `login_cases`), then `status
   and then stalls in the body fails at 10000 ms too, which a client library's own timeout may not cover (axios 0.18's
   stops at the headers). The deadline also closes the connection, so a panel that keeps stalling is not left with one
   more open connection per timeout.
-- Log the panel session out when the integration is unloaded, as the bridge's shutdown handler does. The suite checks
-  that logout only where the bridge gives up after a new login did not help (`failures` in `system_scenarios.json`);
-  the signal path, the counterpart of unloading, has no test, so a port that forgets the logout on unload still passes
-  the suite.
+- Log the panel session out when the integration is unloaded, as the bridge's shutdown handler does, and when a new
+  login is under way, once more after it: that login can open a session after the first logout. The suite checks the
+  logout where the bridge gives up after a new login did not help (`failures` in `system_scenarios.json`) and for an
+  unload during a new login (`shutdown` in `system/app.test.ts`); an unload at any other time has no test.
 
 | JS | Python |
 | --- | --- |

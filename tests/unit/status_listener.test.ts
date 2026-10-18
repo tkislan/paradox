@@ -27,13 +27,13 @@ describe('poll cadence', () => {
 });
 
 describe('statusListener()', () => {
-  it('returns { on, stop }, and on() returns the underlying emitter', async () => {
+  it('returns { on, pause, resume, stop }, and on() returns the underlying emitter', async () => {
     const { listener } = await startListener(ZONES);
     const handler = () => {};
 
     const emitter = listener.on('armedChanged', handler);
 
-    expect(Object.keys(listener).sort()).toEqual(['on', 'stop']);
+    expect(Object.keys(listener).sort()).toEqual(['on', 'pause', 'resume', 'stop']);
     expect(emitter).toBeInstanceOf(EventEmitter);
     expect(emitter.listeners('armedChanged')).toContain(handler);
     expect(listener.on('sensorChanged', handler)).toBe(emitter);
@@ -265,6 +265,22 @@ describe('exceptions inside a poll', () => {
 
     expect(unhandled).toEqual([]);
     expect(logs.error).toContainEqual([expect.objectContaining({ message: 'listener failed' })]);
+    expect(panel.requestsTo(POLL)).toHaveLength(2);
+  });
+});
+
+describe('pause() and resume()', () => {
+  it('no tick polls between pause() and resume(), and the first tick after resume() polls again', async () => {
+    const { panel, listener, clock, tick } = await startListener(ZONES);
+    await tick();
+
+    listener.pause();
+    await clock.advance(5000);
+    await settle();
+    expect(panel.requestsTo(POLL)).toHaveLength(1);
+
+    listener.resume(ZONES);
+    await tick();
     expect(panel.requestsTo(POLL)).toHaveLength(2);
   });
 });

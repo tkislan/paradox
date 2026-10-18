@@ -81,23 +81,28 @@ async function run() {
     return Promise.all([
       new Promise((resolve) => server.close(resolve)),
       logout(),
+      // A new login under way can still open a session after the logout above, and the panel would keep it.
+      relogin && relogin.then(() => logout()),
     ]);
   }
 
-  let reloggingIn = false;
+  /** @type {Promise<void> | null} */
+  let relogin = null;
   let lastReloginAt = -Infinity;
   statusEvents.on('error', (error) => {
     console.error(error);
-    if (reloggingIn) return;
     // Failing again so soon means a new session does not help: shut down as on a signal, then leave it to the restart
     // policy. The shutdown also stops the polls, which would otherwise keep failing into this handler.
     if (Date.now() - lastReloginAt < RELOGIN_MIN_INTERVAL) {
       exitHandler().catch(console.error).finally(() => process.exit(1));
       return;
     }
-    reloggingIn = true;
     lastReloginAt = Date.now();
-    login().then(() => { reloggingIn = false; }, (loginError) => {
+    statusEvents.pause();
+    relogin = login().then(({ zoneTuples: newZoneTuples }) => {
+      relogin = null;
+      statusEvents.resume(newZoneTuples);
+    }, (loginError) => {
       console.error(loginError);
       process.exit(1);
     });

@@ -234,6 +234,7 @@ export type Expect = z.infer<typeof Expect>;
 
 const Step = z.strictObject({
   panel_status: z.strictObject({ ...PanelState, alarms: z.array(z.string()).optional(), troubles: z.array(z.string()).optional() }).optional(),
+  panel_zones: z.array(Zone).optional(),
   panel_fault: PanelFault.optional(),
   panel_expire_session: z.boolean().optional(),
   panel_down: z.boolean().optional(),
