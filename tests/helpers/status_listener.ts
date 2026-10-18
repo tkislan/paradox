@@ -1,10 +1,10 @@
 import { createRequire } from 'node:module';
-import { expect, vi } from 'vitest';
+import { expect } from 'vitest';
 import { FakePanel, type FakePanelOptions, type Zone } from '../mock_paradox.ts';
 import {
-  captureConsole, loadSpec, onCleanup, setBridgeEnv, settle, useFakeClock, waitFor,
+  captureConsole, loadSpec, setBridgeEnv, settle, useFakeClock, waitFor,
 } from '../support.ts';
-import { drain, injectFailure, servePage } from './panel_faults.ts';
+import { drain, holdNextResponse, injectFailure, servePage } from './panel_faults.ts';
 import { CryptoSpec } from '../spec/schemas.ts';
 
 const require = createRequire(import.meta.url);
@@ -56,22 +56,6 @@ export async function boot(panelOptions: FakePanelOptions = {}, env: Record<stri
   return { panel, clock, logs, statusListener, watch, tick };
 }
 
-/**
- * Spies on setInterval (call it after boot(), before creating a listener). Returns a function that runs
- * the most recently registered interval callback once and returns its promise, so a test can await one
- * poll's outcome, rejection included, without a fake-clock tick.
- */
-export function captureIntervals() {
-  const spy = vi.spyOn(globalThis, 'setInterval');
-  // Must be undone before useFakeClock's own cleanup, or the restored spy would put the fake timer back.
-  onCleanup(() => spy.mockRestore());
-  return () => {
-    const call = spy.mock.calls.at(-1);
-    if (!call) throw new Error('No interval has been registered yet');
-    return call[0]();
-  };
-}
-
 export async function startListener(zones, panelOptions?: FakePanelOptions) {
   const env = await boot(panelOptions);
   return { ...env, ...env.watch(zones) };
@@ -109,5 +93,28 @@ export async function expectPollEvents({ zones, polls, expected_events: expected
 
   await settle();
   expect(events).toEqual(expectedEvents);
+  expect([...new Set(panel.requestLines)]).toEqual([POLL_LINE]);
+}
+
+/**
+ * Plays one cadence row: a listener over ZONES, the fake clock moved by each entry of `advance_ms`, and after each the
+ * number of polls the panel has seen so far. With `answers_after_step` the panel holds the answer to the step's poll
+ * until the step is over.
+ */
+export async function expectPollCadence({ advance_ms: advanceMs, expected_requests: expectedRequests, answers_after_step: answersAfterStep = false }) {
+  const { panel, clock } = await startListener(ZONES);
+
+  for (const [step, ms] of advanceMs.entries()) {
+    const slow = answersAfterStep ? holdNextResponse(panel, POLL) : null;
+    await clock.advance(ms);
+    await waitFor(() => panel.requestsTo(POLL).length >= expectedRequests[step], { message: `step ${step}` });
+    await settle(10);
+    expect(panel.requestsTo(POLL), `after step ${step}`).toHaveLength(expectedRequests[step]);
+    if (slow) {
+      slow.release();
+      await drain();
+    }
+  }
+
   expect([...new Set(panel.requestLines)]).toEqual([POLL_LINE]);
 }

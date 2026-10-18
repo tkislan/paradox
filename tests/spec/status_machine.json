@@ -1,5 +1,5 @@
 {
-  "_comment": "State machine of src/status_listener.js. SCENARIO groups (first_poll, armed_codes, sensor_codes, transitions, zone_indexing, failures): { name, zones, polls, expected_events, known_bug?, note? }. zones are the [enabled, name] tuples handed to statusListener() (already filtered by login(); the listener only uses their count and order). polls has one entry per 1000 ms tick: { statuszone, useraccess } makes the panel serve those tables (status code per zone; area state codes, first entry is area 1; tables have 0 or >= 2 entries because a one-entry table is a JavaScript new Array(n)); { page: { file } } serves that captured page (relative to tests/); { fail } makes the panel misbehave for this tick only: { status: n, body? } HTTP answer with that status (default body: a short error text), { connection: \"refused\" | \"reset\" } transport failure, { page: { file } } HTTP 200 with a page that has no status tables. expected_events lists, in emission order over the whole run: [\"armedChanged\", true | false | null], [\"sensorChanged\", \"<zone index as a decimal string>\", true | false], [\"error\"]. Before the first poll the listener assumes armed = null and every sensor = false; it never announces that state, only differences from it. CADENCE group (status_poll_cadence): { name, advance_ms: [...], expected_requests: [...] } advance a fake clock step by step from the creation of the listener and give the cumulative number of requests the panel has seen after each step (GET /statuslive.html). Rows with a known_bug (catalog in README.md) are in known_bugs/status_machine.json, in the same groups; zone_indexing exists only there.",
+  "_comment": "State machine of src/status_listener.js. SCENARIO groups (first_poll, armed_codes, sensor_codes, transitions, zone_indexing, failures): { name, zones, polls, expected_events, known_bug?, note? }. zones are the [area bitmask, name] pairs handed to statusListener(), the leading slots of tbl_zone (login() returns all of them, 32 on a real panel): a slot whose bitmask is not 0 is a sensor, keyed by its position (the slot, which is also its entry of tbl_statuszone), a slot whose bitmask is 0 is unused and has none; names are not used. polls has one entry per 1000 ms tick: { statuszone, useraccess } makes the panel serve those tables (status code per zone; area state codes, first entry is area 1); { page: { file } } serves that captured page (relative to tests/); { fail } makes the panel misbehave for this tick only: { status: n, body? } HTTP answer with that status (default body: a short error text), { connection: \"refused\" | \"reset\" } transport failure, { page: { file } } HTTP 200 with a page that has no status tables. expected_events lists, in emission order over the whole run: [\"armedChanged\", true | false | null], [\"sensorChanged\", \"<zone slot as a decimal string>\", true | false], [\"error\"]. Before the first poll the listener assumes armed = null and every sensor = false; it never announces that state, only differences from it. CADENCE group (status_poll_cadence): { name, advance_ms: [...], expected_requests: [...] } advance a fake clock step by step from the creation of the listener and give the cumulative number of requests the panel has seen after each step (GET /statuslive.html); with answers_after_step: true the panel answers each step's poll only once the step's clock move is over, like a panel slower than the step. Rows with a known_bug (catalog in README.md) are in known_bugs/status_machine.json, in the same groups.",
   "first_poll": [
     {
       "name": "armed panel",
@@ -30,6 +30,13 @@
       "zones": [[1, "A"], [1, "B"], [1, "C"]],
       "polls": [{ "statuszone": [0, 1, 0], "useraccess": [0, 0] }],
       "expected_events": [["sensorChanged", "1", true]]
+    },
+    {
+      "name": "captured pages: unarmed with zone 5 open (6, open+memory), then armed with zone 5 closed (5, closed+memory)",
+      "zones": [[1, "Predsien"], [1, "Lava izba"], [1, "Prava izba"], [1, "Spalna"], [1, "Obyvacka"], [1, "Chodba"]],
+      "polls": [{ "page": { "file": "data/unarmed.html" } }, { "page": { "file": "data/armed.html" } }],
+      "expected_events": [["armedChanged", false], ["sensorChanged", "5", true], ["armedChanged", true], ["sensorChanged", "5", false]],
+      "note": "Zone 0 is 5 (closed+memory) on both captures, so it stays closed."
     }
   ],
   "armed_codes": [
@@ -50,6 +57,42 @@
       "zones": [[1, "A"]],
       "polls": [{ "statuszone": [0, 0], "useraccess": [1, 0] }, { "statuszone": [0, 0], "useraccess": [7, 0] }],
       "expected_events": [["armedChanged", false], ["armedChanged", true]]
+    },
+    {
+      "name": "code 4 (sleep) after disarmed: armed",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [1, 0] }, { "statuszone": [0, 0], "useraccess": [4, 0] }],
+      "expected_events": [["armedChanged", false], ["armedChanged", true]]
+    },
+    {
+      "name": "code 5 (stay) after disarmed: armed",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [1, 0] }, { "statuszone": [0, 0], "useraccess": [5, 0] }],
+      "expected_events": [["armedChanged", false], ["armedChanged", true]]
+    },
+    {
+      "name": "code 6 (entry delay) after disarmed: armed",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [1, 0] }, { "statuszone": [0, 0], "useraccess": [6, 0] }],
+      "expected_events": [["armedChanged", false], ["armedChanged", true]]
+    },
+    {
+      "name": "code 10 (instant) after disarmed: armed",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [1, 0] }, { "statuszone": [0, 0], "useraccess": [10, 0] }],
+      "expected_events": [["armedChanged", false], ["armedChanged", true]]
+    },
+    {
+      "name": "code 8 (ready) after armed: disarmed",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [8, 0] }],
+      "expected_events": [["armedChanged", true], ["armedChanged", false]]
+    },
+    {
+      "name": "code 9 (not ready) after armed: disarmed",
+      "zones": [[1, "A"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [2, 0] }, { "statuszone": [0, 0], "useraccess": [9, 0] }],
+      "expected_events": [["armedChanged", true], ["armedChanged", false]]
     },
     {
       "name": "armed to arming (2 -> 7): no event",
@@ -130,6 +173,30 @@
       "expected_events": [["sensorChanged", "0", true]]
     },
     {
+      "name": "code 2 (in alarm) is open",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [0, 0] }, { "statuszone": [2, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true]]
+    },
+    {
+      "name": "code 4 (open+trouble) is open",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [0, 0] }, { "statuszone": [4, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true]]
+    },
+    {
+      "name": "code 6 (open+memory) is open",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [0, 0] }, { "statuszone": [6, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true]]
+    },
+    {
+      "name": "code 9 (open) is open",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [{ "statuszone": [0, 0], "useraccess": [0, 0] }, { "statuszone": [9, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true]]
+    },
+    {
       "name": "code 1 stays open: announced once",
       "zones": [[1, "A"], [1, "B"]],
       "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [1, 0], "useraccess": [0, 0] }],
@@ -163,12 +230,6 @@
       "name": "code 8 after open: closed",
       "zones": [[1, "A"], [1, "B"]],
       "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [8, 0], "useraccess": [0, 0] }],
-      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]]
-    },
-    {
-      "name": "code 9 after open: closed",
-      "zones": [[1, "A"], [1, "B"]],
-      "polls": [{ "statuszone": [1, 0], "useraccess": [0, 0] }, { "statuszone": [9, 0], "useraccess": [0, 0] }],
       "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "0", false]]
     },
     {
@@ -334,11 +395,10 @@
       "expected_events": [["armedChanged", true], ["armedChanged", false]]
     },
     {
-      "name": "the enabled flag and the name of a zone tuple do not matter to the listener",
+      "name": "a slot whose area bitmask is 0 is unused: its open status is never announced",
       "zones": [[0, " "], [1, "B"]],
       "polls": [{ "statuszone": [1, 1], "useraccess": [0, 0] }],
-      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "1", true]],
-      "note": "Disabled zones are filtered out by login(); the listener indexes whatever list it is given."
+      "expected_events": [["sensorChanged", "1", true]]
     },
     {
       "name": "armed and zones change over a longer run",
@@ -359,6 +419,38 @@
         ["armedChanged", false],
         ["sensorChanged", "1", false]
       ]
+    }
+  ],
+  "zone_indexing": [
+    {
+      "name": "slot 2 after unused slot 1: the Hall opens and is sensor 2",
+      "zones": [[1, "Door"], [0, " "], [1, "Hall"]],
+      "polls": [{ "statuszone": [0, 0, 1], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "2", true]]
+    },
+    {
+      "name": "unused slot 1 between two zones: its open status is not announced",
+      "zones": [[1, "Door"], [0, " "], [1, "Hall"]],
+      "polls": [{ "statuszone": [0, 1, 0], "useraccess": [0, 0] }],
+      "expected_events": []
+    },
+    {
+      "name": "slot 0 before unused slot 1: the Door reads its own status",
+      "zones": [[1, "Door"], [0, " "], [1, "Hall"]],
+      "polls": [{ "statuszone": [1, 0, 0], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true]]
+    },
+    {
+      "name": "zones of any area are sensors: bitmasks 2, 3, 9 and 16 around an unused slot",
+      "zones": [[2, "Area two"], [0, " "], [3, "Areas one and two"], [9, "Areas one and four"], [16, "Area five"]],
+      "polls": [{ "statuszone": [1, 1, 1, 1, 1], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "2", true], ["sensorChanged", "3", true], ["sensorChanged", "4", true]]
+    },
+    {
+      "name": "the bitmask decides, not the name: a blank-named zone is a sensor, a named slot with bitmask 0 is not",
+      "zones": [[1, " "], [0, "Old"], [1, ""]],
+      "polls": [{ "statuszone": [1, 1, 1], "useraccess": [0, 0] }],
+      "expected_events": [["sensorChanged", "0", true], ["sensorChanged", "2", true]]
     }
   ],
   "failures": [
@@ -450,6 +542,28 @@
         { "statuszone": [0, 0], "useraccess": [2, 0] }
       ],
       "expected_events": [["armedChanged", true], ["error"], ["error"]]
+    },
+    {
+      "name": "the login page after the session expired is an error (HTTP 200, no status tables)",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [
+        { "statuszone": [1, 0], "useraccess": [1, 0] },
+        { "fail": { "page": { "file": "data/login_page.html" } } }
+      ],
+      "expected_events": [["armedChanged", false], ["sensorChanged", "0", true], ["error"]],
+      "note": "What a real panel answers once the session expired was never captured; the fake panel answers its login page. app.js answers the error with a new login."
+    },
+    {
+      "name": "a persistently expired session fails every poll",
+      "zones": [[1, "A"], [1, "B"]],
+      "polls": [
+        { "statuszone": [1, 0], "useraccess": [1, 0] },
+        { "fail": { "page": { "file": "data/login_page.html" } } },
+        { "fail": { "page": { "file": "data/login_page.html" } } },
+        { "fail": { "page": { "file": "data/login_page.html" } } }
+      ],
+      "expected_events": [["armedChanged", false], ["sensorChanged", "0", true], ["error"], ["error"], ["error"]],
+      "note": "The listener keeps polling and reports every failure; logging in again is up to app.js."
     }
   ],
   "status_poll_cadence": [
@@ -463,6 +577,12 @@
       "advance_ms": [1000, 999, 1, 999, 1],
       "expected_requests": [1, 1, 2, 2, 3]
     },
-    { "name": "a long jump runs every missed poll", "advance_ms": [5000], "expected_requests": [5] }
+    {
+      "name": "a long jump while a poll is unanswered sends no further poll: its ticks are skipped, not caught up",
+      "advance_ms": [5000, 1000],
+      "expected_requests": [1, 2],
+      "answers_after_step": true,
+      "note": "The poll of the tick at 1000 ms is answered only after the 5000 ms jump, so the ticks at 2000 to 5000 ms find it pending; the tick at 6000 ms polls again."
+    }
   ]
 }

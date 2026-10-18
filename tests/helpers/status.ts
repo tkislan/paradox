@@ -19,17 +19,6 @@ export const requestRows = (rows: any[], ...operations: string[]) => rows.filter
 
 export const httpFailureRows = spec.body_ignoring_responses.flatMap((row) => ('error' in row.expected ? [{ ...row, expected: row.expected }] : []));
 
-// The panel's tables are eval-ed in a vm context: their arrays have a foreign prototype, and
-// `new Array(n)` has n unset slots. The spec describes both in language-neutral terms.
-export const plain = (list) => (list.length > 0 && Object.keys(list).length === 0 ? { empty_slots: list.length } : Array.from(list));
-
-export const plainStatus = (status) => ({
-  ...status,
-  statuszone: plain(status.statuszone),
-  useraccess: plain(status.useraccess),
-  alarms: plain(status.alarms),
-});
-
 export async function startBridge(panelOptions?: FakePanelOptions) {
   const logs = captureConsole();
   const panel = await new FakePanel(panelOptions).start();
@@ -45,7 +34,7 @@ export async function expectParsedStatus({ page, expected }) {
     const error = await rejection(getStatus());
     expect(error.message).toBe(expected.error);
   } else {
-    expect(plainStatus(await getStatus())).toEqual(expected);
+    expect(await getStatus()).toEqual(expected);
   }
 }
 
