@@ -132,11 +132,12 @@ export function isolateProcessListeners(events: NodeJS.Signals[] = ['SIGHUP', 'S
 }
 
 /**
- * Fakes setTimeout/setInterval/Date but NOT setImmediate or nextTick, so real loopback sockets
+ * Fakes setTimeout/setInterval/Date/process.hrtime but NOT setImmediate or nextTick, so real loopback sockets
  * (fake panel, fake broker) keep working while the bridge's 1 s / 3 s / 5 s timers are driven by hand.
+ * `vi.setSystemTime` moves Date alone, as a wall-clock step moves the system time but not process.hrtime.
  */
 export function useFakeClock() {
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date', 'hrtime'] });
   onCleanup(() => vi.useRealTimers());
   return {
     /** Advances fake time, running due timers and their promise continuations. Does not wait for network I/O. */

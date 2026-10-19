@@ -30,8 +30,9 @@ async function request(config) {
 }
 
 /**
- * Whether a request rejected without a complete answer from the panel: the deadline passed, or the connection was
- * refused or broke before the response was complete. An HTTP error status is an answer.
+ * Whether a request rejected without a whole HTTP response to show for it: the deadline passed, the connection was
+ * refused or reset, the body was cut short, the bytes were not valid HTTP or did not decompress, or the redirects ran
+ * past the limit. An HTTP error status is an answer, and so is a page that fails to parse.
  * @param {any} error what `request` rejected with
  * @returns {boolean}
  */

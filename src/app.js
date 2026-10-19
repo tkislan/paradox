@@ -10,6 +10,7 @@ const { statusListener } = require('./status_listener');
 const { createMqttLink } = require('./mqtt_link');
 const { PORT } = require('./config');
 const { setupSignalHandler } = require('./signal');
+const { monotonicNow } = require('./util');
 
 const STATUS_ARMED_TOPIC = 'paradox/status/armed';
 const SENSOR_MOTION_TOPIC_TEMPLATE = (index) => `paradox/sensor/${index}`;
@@ -92,11 +93,11 @@ async function run() {
   statusEvents.on('error', () => {
     // Failing again so soon means a new session does not help: shut down as on a signal, then leave it to the restart
     // policy. The shutdown also stops the polls, which would otherwise keep failing into this handler.
-    if (Date.now() - lastReloginAt < RELOGIN_MIN_INTERVAL) {
+    if (monotonicNow() - lastReloginAt < RELOGIN_MIN_INTERVAL) {
       exitHandler().catch(console.error).finally(() => process.exit(1));
       return;
     }
-    lastReloginAt = Date.now();
+    lastReloginAt = monotonicNow();
     statusEvents.pause();
     relogin = login().then(({ zoneTuples: newZoneTuples }) => {
       relogin = null;
