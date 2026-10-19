@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   captureUnhandledRejections, loadSpec, settle, waitFor, withTitle,
 } from '../support.ts';
-import { holdNextResponse, injectFailure } from '../helpers/panel_faults.ts';
+import { holdNextResponse, ignoreNextConnection, injectFailure } from '../helpers/panel_faults.ts';
 import {
   POLL, POLL_LINE, ZONES, boot, bootLoggedIn, expectPollCadence, expectPollEvents, startListener,
 } from '../helpers/status_listener.ts';
@@ -157,6 +157,28 @@ describe('failed polls', () => {
     await clock.advance(1000);
     await waitFor(() => events.length === 1, { message: 'a poll to be answered' });
     expect(events).toEqual([['armedChanged', false]]);
+  });
+
+  it('a connection that never opens: logs the connect timeout error 2000 ms after the poll was sent, emits none, and the next tick polls again', async () => {
+    const { events, errors, logs, clock } = await startListener(ZONES);
+    const connect = ignoreNextConnection();
+
+    await clock.advance(1000);
+    await waitFor(() => connect.mock.calls.length === 1, { message: 'the poll' });
+    await clock.advance(1999);
+    await settle();
+    expect(logs.error).toEqual([]);
+
+    await clock.advance(1);
+    await waitFor(() => logs.error.length === 1, { message: 'the connect timeout error' });
+    expect(logs.error[0][0]).toMatchObject({ message: 'connect timeout of 2000ms exceeded' });
+
+    // The tick on the timeout's millisecond may poll or be skipped (README), so this waits for an answered poll
+    // instead of counting polls.
+    await clock.advance(1000);
+    await waitFor(() => events.length === 1, { message: 'a poll to be answered' });
+    expect(events).toEqual([['armedChanged', false]]);
+    expect(errors).toEqual([]);
   });
 
   it('reports a failure through the error event only: nothing is rejected', async () => {

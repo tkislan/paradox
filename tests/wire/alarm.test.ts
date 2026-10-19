@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ARMED, DISARMED } from '../mock_paradox.ts';
 import { withTitle } from '../support.ts';
-import { expectTimeout, rejection } from '../helpers/outcomes.ts';
+import { expectConnectTimeout, expectTimeout, rejection } from '../helpers/outcomes.ts';
 import { html } from '../helpers/responses.ts';
 import { COMMANDS, expectResponseHandled, requestRows, spec, startBridge } from '../helpers/alarm.ts';
 
@@ -131,5 +131,11 @@ describe.each(COMMANDS)('%s() outcome', (command) => {
     const api = await startBridge();
 
     await expectTimeout(api.panel, '/statuslive.html', api[command], { stall: '<html><head>' });
+  });
+
+  it('rejects 2000 ms after the call when the connection never opens', async () => {
+    const api = await startBridge();
+
+    await expectConnectTimeout(api.panel, api[command]);
   });
 });

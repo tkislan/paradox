@@ -6,9 +6,9 @@ const { getStatus } = require('./api/status');
 const { isUnanswered } = require('./api/http_client');
 const { deepArrayEqual, monotonicNow } = require('./util');
 
-// The panel stops accepting connections for seconds at a time, which says nothing about its session: polls it does
-// not answer are only logged until this long after the first of them, then the error is reported (app.js logs in
-// again on it).
+// The panel ignores single connections at times (see CONNECT_TIMEOUT in api/http_client.js), which says nothing about
+// its session: polls it does not answer are only logged until this long after the first of them, then the error is
+// reported (app.js logs in again on it).
 const UNANSWERED_GRACE = 60 * 1000; // in milliseconds
 
 // Names from the panel's own scripts; captured pages confirm only 1 and 7. In alarm (3) stays unknown: an alarm

@@ -38,7 +38,7 @@ versions production installs.
 
 ## Coverage
 
-95.8 % of lines, 97.4 % of branches. Dead code in `src/` is not covered: the `default:` case of the sensor handler
+95.9 % of lines, 97.4 % of branches. Dead code in `src/` is not covered: the `default:` case of the sensor handler
 (`app.js:47`, the value is always a boolean) and `initSensorStatus` (`status_listener.js:54-56`, never called).
 Deliberately without a test, because a Home Assistant integration has nothing like them: the REST API (`app.js`),
 signal handling (`signal.js`), the missing-variable check (`config.js`), MQTT connection failures (`mqtt_link.js`) and
@@ -88,11 +88,14 @@ system tests' cleanup, which calls the SIGTERM listener the bridge registered.
   `{ "name", ...inputs, "expected", "known_bug"?, "note"? }`, and its format is in `spec/schemas.ts`. The JS test is a
   thin `it.each` loop, which is also what `pytest.mark.parametrize` over the same file looks like.
 - **Time**: the bridge's own timers (1 s poll, 3 s keep-alive, 5 s MQTT connect timeout, 1 s between index page
-  attempts at login, the 20 s deadline of every panel request, which covers the whole exchange, headers and body) and
+  attempts at login, the 2 s a connection to the panel gets to open, the 20 s deadline of every panel request, which
+  covers the whole exchange, headers and body) and
   its monotonic clock (`process.hrtime`: polls the panel does not answer count as failed only once they have gone on
   for 60 s; a poll that fails less than 60 s after the last new login started, once that login has finished, ends the
   bridge instead of logging in again) run on a fake clock (`useFakeClock`), together with `Date`, which a scenario step
-  can move alone (`wall_clock_step_ms`); sockets are real. The bridge skips a tick
+  can move alone (`wall_clock_step_ms`); sockets are real, except the one a test needs to never open
+  (`ignoreNextConnection()`: Node's servers accept every connection at once, so a fake panel cannot leave a handshake
+  unanswered). The bridge skips a tick
   while its last poll is unanswered or a new login is pending, and in one long jump of the clock the sockets fall
   behind, so the scenario steps move it one poll interval at a time and let the panel answer in between.
   Wait for effects with `waitFor`; `settle()` is only for "nothing happened" assertions, and with a broker only after
@@ -137,15 +140,18 @@ projects), then the parsing tables (`status_pages`, `login_cases`), then `status
 - `panel_requests_ignored` in a scenario step names requests the row takes no side on: the poll of a tick that falls
   on the same millisecond as a request timeout.
 - Error strings that come from axios or V8 (`Request failed with status code 500`, `socket hang up`) are not portable;
-  only the fact of failing is. The bridge's own messages (`Login failed`, `timeout of 20000ms exceeded`, ...) are. That
+  only the fact of failing is. The bridge's own messages (`Login failed`, `connect timeout of 2000ms exceeded`,
+  `timeout of 20000ms exceeded`, ...) are. The 20000 ms
   timeout is a deadline on the whole exchange, headers and body, counted from the call: a panel that sends the headers
   and then stalls in the body fails at 20000 ms too, which a client library's own timeout may not cover (axios 0.18's
   stops at the headers). The deadline also closes the connection, so a panel that keeps stalling is not left with one
   more open connection per timeout.
-- A poll the panel does not answer (no answer before the deadline, a refused or reset connection) is not taken for a
-  lost session. A real panel stops accepting TCP connections for about 7 to 10 s at a time while it keeps answering
-  ping; a connection attempt the stall holds up past the SYN retry at 7 s gets through only with Linux's next one, at
-  15 s, hence the 20 s deadline. Such polls are only logged, and the next tick tries again; the first of them that fails
+- A poll the panel does not answer (a connection that does not open within 2 s, no answer before the deadline, a
+  refused or reset connection) is not taken for a lost session. A real panel ignores a new connection from a source
+  port it saw about a minute earlier, together with every SYN retry of it, while connections from other ports go
+  through and it keeps answering ping. Giving such a connection up after 2 s lets the next tick connect from a new
+  port, so a stuck poll costs about 3 s rather than the 20 s deadline. Such polls are only logged, and the next tick
+  tries again; the first of them that fails
   60 s or more after the first one is treated like any failed poll (a new login, see `failures` in
   `system_scenarios.json`), and the 60 s count starts again at the next one. A poll the panel answered, with an HTTP
   error or a page that does not parse, fails at once, and any answered poll ends the run. Unanswered polls alone never
@@ -165,6 +171,7 @@ projects), then the parsing tables (`status_pages`, `login_cases`), then `status
 | `crypto_reference.py` | start of the client library; `python3 -I spec/crypto_reference.py` checks all vectors |
 | `FakePanel.handle(request)` | an `aioclient_mock` callback or `aiohttp` test server around the same function; the `stall` fault (the headers and the start of a body, then the response left open) and the check that a timed-out request closes its connection need the test server |
 | `FakePanel.requestLines` assertions | the exact URLs the client must request, in order |
+| `ignoreNextConnection()` (a stub of `net.Socket#connect`) | a connection that never opens, without a stub: on Linux, a socket listening with a backlog of 0 that holds one connection it never accepts drops the SYNs of the next one |
 | `useFakeClock` + `wall_clock_step_ms` | a fake clock for the timers and the monotonic clock, and a separate way to move the wall clock alone: a fake that moves both cannot express the step |
 | Mosquitto fixtures | only if the port keeps MQTT; Home Assistant has its own MQTT test helpers (`mqtt_mock`) |
 
