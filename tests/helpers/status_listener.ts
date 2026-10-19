@@ -29,7 +29,6 @@ export async function boot(panelOptions: FakePanelOptions = {}, env: Record<stri
   setBridgeEnv({ HOSTNAME: panel.hostname, ...env });
   const clock = useFakeClock();
   const { statusListener } = require('../../src/status_listener.js');
-  const watchers: Watcher[] = [];
 
   const watch = (zones) => {
     const listener = statusListener(zones);
@@ -40,12 +39,12 @@ export async function boot(panelOptions: FakePanelOptions = {}, env: Record<stri
       watcher.errors.push(error);
       watcher.events.push(['error']);
     });
-    watchers.push(watcher);
     return watcher;
   };
 
-  // A refused connection never reaches the panel, so a poll is complete once it either arrived or failed.
-  const progress = () => panel.requestsTo(POLL).length + watchers.reduce((sum, w) => sum + w.errors.length, 0);
+  // A refused connection never reaches the panel, and a poll the panel did not answer emits no error, so a poll is
+  // complete once it either arrived or its failure was logged.
+  const progress = () => panel.requestsTo(POLL).length + logs.error.length;
   const tick = async (polls = 1) => {
     const before = progress();
     await clock.advance(1000);

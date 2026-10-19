@@ -1,5 +1,5 @@
 {
-  "_comment": "State machine of src/status_listener.js. SCENARIO groups (first_poll, armed_codes, sensor_codes, transitions, zone_indexing, failures): { name, zones, polls, expected_events, known_bug?, note? }. zones are the [area bitmask, name] pairs handed to statusListener(), the leading slots of tbl_zone (login() returns all of them, 32 on a real panel): a slot whose bitmask is not 0 is a sensor, keyed by its position (the slot, which is also its entry of tbl_statuszone), a slot whose bitmask is 0 is unused and has none; names are not used. polls has one entry per 1000 ms tick: { statuszone, useraccess } makes the panel serve those tables (status code per zone; area state codes, first entry is area 1); { page: { file } } serves that captured page (relative to tests/); { fail } makes the panel misbehave for this tick only: { status: n, body? } HTTP answer with that status (default body: a short error text), { connection: \"refused\" | \"reset\" } transport failure, { page: { file } } HTTP 200 with a page that has no status tables. expected_events lists, in emission order over the whole run: [\"armedChanged\", true | false | null], [\"sensorChanged\", \"<zone slot as a decimal string>\", true | false], [\"error\"]. Before the first poll the listener assumes armed = null and every sensor = false; it never announces that state, only differences from it. CADENCE group (status_poll_cadence): { name, advance_ms: [...], expected_requests: [...] } advance a fake clock step by step from the creation of the listener and give the cumulative number of requests the panel has seen after each step (GET /statuslive.html); with answers_after_step: true the panel answers each step's poll only once the step's clock move is over, like a panel slower than the step. Rows with a known_bug (catalog in README.md) are in known_bugs/status_machine.json, in the same groups.",
+  "_comment": "State machine of src/status_listener.js. SCENARIO groups (first_poll, armed_codes, sensor_codes, transitions, zone_indexing, failures): { name, zones, polls, expected_events, known_bug?, note? }. zones are the [area bitmask, name] pairs handed to statusListener(), the leading slots of tbl_zone (login() returns all of them, 32 on a real panel): a slot whose bitmask is not 0 is a sensor, keyed by its position (the slot, which is also its entry of tbl_statuszone), a slot whose bitmask is 0 is unused and has none; names are not used. polls has one entry per 1000 ms tick: { statuszone, useraccess } makes the panel serve those tables (status code per zone; area state codes, first entry is area 1); { page: { file } } serves that captured page (relative to tests/); { fail } makes the panel misbehave for this tick only: { status: n, body? } HTTP answer with that status (default body: a short error text), { connection: \"refused\" | \"reset\" } transport failure, { page: { file } } HTTP 200 with a page that has no status tables. A poll the panel did not answer (a transport failure, or no answer within the deadline) emits an error only once such polls have been failing for 60000 ms, counted from the first of them; until then it is only logged. A poll the panel answers ends the run, and so does that error: the 60000 ms count starts again at the next unanswered poll. No row here is long enough to reach it; the failures group of system_scenarios.json pins it. expected_events lists, in emission order over the whole run: [\"armedChanged\", true | false | null], [\"sensorChanged\", \"<zone slot as a decimal string>\", true | false], [\"error\"]. Before the first poll the listener assumes armed = null and every sensor = false; it never announces that state, only differences from it. CADENCE group (status_poll_cadence): { name, advance_ms: [...], expected_requests: [...] } advance a fake clock step by step from the creation of the listener and give the cumulative number of requests the panel has seen after each step (GET /statuslive.html); with answers_after_step: true the panel answers each step's poll only once the step's clock move is over, like a panel slower than the step. Rows with a known_bug (catalog in README.md) are in known_bugs/status_machine.json, in the same groups.",
   "first_poll": [
     {
       "name": "armed panel",
@@ -506,24 +506,24 @@
       "expected_events": [["error"], ["error"], ["error"]]
     },
     {
-      "name": "connection refused is an error, and the listener recovers when the panel is back",
+      "name": "a refused connection emits no error, and the listener recovers when the panel is back",
       "zones": [[1, "A"], [1, "B"]],
       "polls": [
         { "statuszone": [1, 0], "useraccess": [1, 0] },
         { "fail": { "connection": "refused" } },
         { "statuszone": [1, 0], "useraccess": [1, 0] }
       ],
-      "expected_events": [["armedChanged", false], ["sensorChanged", "0", true], ["error"]]
+      "expected_events": [["armedChanged", false], ["sensorChanged", "0", true]]
     },
     {
-      "name": "connection reset is an error, and the listener recovers",
+      "name": "a reset connection emits no error, and the listener recovers",
       "zones": [[1, "A"], [1, "B"]],
       "polls": [
         { "statuszone": [1, 0], "useraccess": [1, 0] },
         { "fail": { "connection": "reset" } },
         { "statuszone": [0, 0], "useraccess": [1, 0] }
       ],
-      "expected_events": [["armedChanged", false], ["sensorChanged", "0", true], ["error"], ["sensorChanged", "0", false]]
+      "expected_events": [["armedChanged", false], ["sensorChanged", "0", true], ["sensorChanged", "0", false]]
     },
     {
       "name": "a page without status tables is an error",
@@ -532,7 +532,7 @@
       "expected_events": [["error"]]
     },
     {
-      "name": "an error between two identical armed polls does not re-announce the armed state",
+      "name": "a failed poll between two identical armed polls does not re-announce the armed state",
       "zones": [[1, "A"]],
       "polls": [
         { "statuszone": [0, 0], "useraccess": [2, 0] },
@@ -541,7 +541,7 @@
         { "fail": { "connection": "reset" } },
         { "statuszone": [0, 0], "useraccess": [2, 0] }
       ],
-      "expected_events": [["armedChanged", true], ["error"], ["error"]]
+      "expected_events": [["armedChanged", true], ["error"]]
     },
     {
       "name": "the login page after the session expired is an error (HTTP 200, no status tables)",

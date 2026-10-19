@@ -205,7 +205,7 @@ describe('logout()', () => {
     expect(outcome.error?.code).toBe('ECONNREFUSED');
   });
 
-  it('rejects 10000 ms after the call when the panel never answers', async () => {
+  it('rejects 20000 ms after the call when the panel never answers', async () => {
     const { panel, logout } = await startBridge();
 
     await expectTimeout(panel, '/logout.html', logout);

@@ -25,7 +25,7 @@ export function track(promise) {
 
 /**
  * Calls `call` on a fake clock while the panel answers every request to `pathname` with `fault` (by default it never
- * answers), and checks that the call rejects 10000 ms after it was made, not a millisecond earlier, having sent that
+ * answers), and checks that the call rejects 20000 ms after it was made, not a millisecond earlier, having sent that
  * one request, and that the connection to the panel is then closed.
  */
 export async function expectTimeout(panel, pathname: string, call: () => Promise<unknown>, fault: PanelResult = { hang: true }) {
@@ -34,14 +34,14 @@ export async function expectTimeout(panel, pathname: string, call: () => Promise
   const outcome = track(call());
   await waitFor(() => panel.requestsTo(pathname).length === 1, { message: `the request to ${pathname}` });
 
-  await clock.advance(9999);
+  await clock.advance(19999);
   await settle();
   expect(outcome.state).toBe('pending');
 
   await clock.advance(1);
   await waitFor(() => outcome.state !== 'pending', { message: 'the call to time out' });
   expect(outcome.state).toBe('rejected');
-  expect(outcome.error.message).toBe('timeout of 10000ms exceeded');
+  expect(outcome.error.message).toBe('timeout of 20000ms exceeded');
   expect(panel.requests).toHaveLength(1);
   await waitFor(() => panel.sockets.size === 0, { message: 'the panel connection to close' });
 }

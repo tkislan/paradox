@@ -10,11 +10,12 @@ const { statusListener } = require('./status_listener');
 const { createMqttLink } = require('./mqtt_link');
 const { PORT } = require('./config');
 const { setupSignalHandler } = require('./signal');
+const { monotonicNow } = require('./util');
 
 const STATUS_ARMED_TOPIC = 'paradox/status/armed';
 const SENSOR_MOTION_TOPIC_TEMPLATE = (index) => `paradox/sensor/${index}`;
-// Any failed poll earns a re-login, since what the panel answers once a session expired was never captured. At most
-// one per interval: each login ends whatever session the panel holds, and it holds only one.
+// Every error the status listener reports earns a re-login, since what the panel answers once a session expired was
+// never captured. At most one per interval: each login ends whatever session the panel holds, and it holds only one.
 const RELOGIN_MIN_INTERVAL = 60 * 1000; // in milliseconds
 
 async function run() {
@@ -89,15 +90,14 @@ async function run() {
   /** @type {Promise<void> | null} */
   let relogin = null;
   let lastReloginAt = -Infinity;
-  statusEvents.on('error', (error) => {
-    console.error(error);
+  statusEvents.on('error', () => {
     // Failing again so soon means a new session does not help: shut down as on a signal, then leave it to the restart
     // policy. The shutdown also stops the polls, which would otherwise keep failing into this handler.
-    if (Date.now() - lastReloginAt < RELOGIN_MIN_INTERVAL) {
+    if (monotonicNow() - lastReloginAt < RELOGIN_MIN_INTERVAL) {
       exitHandler().catch(console.error).finally(() => process.exit(1));
       return;
     }
-    lastReloginAt = Date.now();
+    lastReloginAt = monotonicNow();
     statusEvents.pause();
     relogin = login().then(({ zoneTuples: newZoneTuples }) => {
       relogin = null;

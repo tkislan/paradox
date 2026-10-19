@@ -239,6 +239,7 @@ const Step = z.strictObject({
   panel_expire_session: z.boolean().optional(),
   panel_down: z.boolean().optional(),
   mqtt_command: z.union([z.enum(['arm', 'disarm']), z.strictObject({ topic: z.string(), payload: z.string() })]).optional(),
+  wall_clock_step_ms: z.number().optional(),
   advance_ms: z.number().optional(),
   ready: z.boolean().optional(),
   expect: Expect.optional(),

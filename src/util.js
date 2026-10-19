@@ -9,6 +9,15 @@ function sleep(ms) {
 }
 
 /**
+ * Milliseconds on a clock that setting the system time does not move (an NTP step, a resumed VM), for measuring how
+ * long something took. Only the difference between two readings means anything.
+ * @returns {number}
+ */
+function monotonicNow() {
+  return Number(process.hrtime.bigint() / 1_000_000n);
+}
+
+/**
  * @param {any[]} [a]
  * @param {any[]} [b]
  * @returns {boolean}
@@ -89,6 +98,7 @@ function objectEntries(object) {
 
 module.exports = {
   sleep,
+  monotonicNow,
   deepArrayEqual,
   getJsValue,
   iterateTuples,

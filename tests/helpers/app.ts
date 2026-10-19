@@ -173,6 +173,7 @@ async function perform(world: World, step: Step) {
       : step.mqtt_command;
     await world.broker.publish(topic, payload);
   }
+  if (step.wall_clock_step_ms) vi.setSystemTime(Date.now() + step.wall_clock_step_ms);
   if (step.advance_ms) await advance(world, step.advance_ms);
   if (step.ready) await world.awaitReady();
 }

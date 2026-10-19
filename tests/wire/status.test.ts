@@ -155,13 +155,13 @@ describe.each(OPERATIONS)('%s() transport', (operation, pathname) => {
     expect(api.panel.requestsTo(pathname)).toHaveLength(1);
   });
 
-  it('rejects 10000 ms after the call when the panel never answers', async () => {
+  it('rejects 20000 ms after the call when the panel never answers', async () => {
     const api = await startBridge();
 
     await expectTimeout(api.panel, pathname, api[operation]);
   });
 
-  it('rejects 10000 ms after the call when the panel stalls halfway through the body', async () => {
+  it('rejects 20000 ms after the call when the panel stalls halfway through the body', async () => {
     const api = await startBridge();
 
     await expectTimeout(api.panel, pathname, api[operation], { stall: '<html><head>' });
