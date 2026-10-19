@@ -4,7 +4,7 @@ import {
   FLOW_PATHS, SAMPLE_ZONES, crypto, expectHeaders, expectRequestCounts, golden, outcomeOf, runHangScenario,
   runIndexRetryScenario, runLoginScenario, spec, startBridge, vector, warnings,
 } from '../helpers/login.ts';
-import { expectNoCredentials, expectTimeout } from '../helpers/outcomes.ts';
+import { expectConnectTimeout, expectNoCredentials, expectTimeout } from '../helpers/outcomes.ts';
 
 describe('login()', () => {
   it('logs in with the encrypted credentials and returns every zone slot', async () => {
@@ -209,5 +209,11 @@ describe('logout()', () => {
     const { panel, logout } = await startBridge();
 
     await expectTimeout(panel, '/logout.html', logout);
+  });
+
+  it('rejects 2000 ms after the call when the connection never opens', async () => {
+    const { panel, logout } = await startBridge();
+
+    await expectConnectTimeout(panel, logout);
   });
 });

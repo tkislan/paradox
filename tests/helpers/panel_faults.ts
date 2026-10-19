@@ -1,5 +1,20 @@
+import net from 'node:net';
+import { vi } from 'vitest';
 import { specText } from '../support.ts';
 import { html } from './responses.ts';
+
+/**
+ * Keeps the next TCP connection from ever opening, as the panel does with one from a source port it saw about a
+ * minute earlier: the socket never connects, and the panel never sees its request. Node's servers accept every
+ * connection at once, so no fake panel can leave a handshake unanswered; hence the stub. Later connections open as
+ * usual. Returns the spy, whose `mock.contexts` are the sockets.
+ */
+export function ignoreNextConnection() {
+  return vi.spyOn(net.Socket.prototype, 'connect').mockImplementationOnce(function (this: net.Socket) {
+    // The real connect() sets this too, so writes wait for 'connect' instead of failing with ERR_SOCKET_CLOSED.
+    return Object.assign(this, { connecting: true });
+  });
+}
 
 /**
  * Lets loopback responses that have already been written reach the code under test and run its

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { expectTimeout, rejection } from '../helpers/outcomes.ts';
+import { expectConnectTimeout, expectTimeout, rejection } from '../helpers/outcomes.ts';
 import { html } from '../helpers/responses.ts';
 import { specText, withTitle } from '../support.ts';
 import {
@@ -165,6 +165,12 @@ describe.each(OPERATIONS)('%s() transport', (operation, pathname) => {
     const api = await startBridge();
 
     await expectTimeout(api.panel, pathname, api[operation], { stall: '<html><head>' });
+  });
+
+  it('rejects 2000 ms after the call when the connection never opens', async () => {
+    const api = await startBridge();
+
+    await expectConnectTimeout(api.panel, api[operation]);
   });
 });
 
